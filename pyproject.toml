@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "niess"
+dynamic = ["version"]
+description = ''
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Gregory Tucker", email = "gregory.tucker@ess.eu" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "scipp>=25.1.0",
+  "numpy",
+  "scipy",
+  "mccode-antlr>=0.9.3",
+]
+
+[project.urls]
+Documentation = "https://github.com/g5t/niess#readme"
+Issues = "https://github.com/g5t/niess/issues"
+Source = "https://github.com/g5t/niess"
+
+[tool.hatch.version]
+path = "src/niess/__about__.py"
+
+[tool.hatch.envs.default]
+type = "virtual"
+path = ".venv"
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/niess tests}"
+
+[tool.coverage.run]
+source_pkgs = ["niess", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/niess/__about__.py",
+]
+
+[tool.coverage.paths]
+niess = ["src/niess", "*/niess/src/niess"]
+tests = ["tests", "*/niess/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
