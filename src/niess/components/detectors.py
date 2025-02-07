@@ -9,7 +9,7 @@ class Wire:
     resistivity: Variable
 
     def extreme_path_corners(self, horizontal: Variable, vertical: Variable, unit=None):
-        from .spatial import combine_extremes
+        from ..spatial import combine_extremes
         from scipp import concat
         return combine_extremes([concat([self.at, self.to], 'vertices')], horizontal, vertical)
 
@@ -32,7 +32,7 @@ class Wire:
             raise RuntimeError("Wire end point, to, must be a scipp.DType('vector3')")
         if self.to.unit != self.at.unit:
             raise RuntimeError("Wire end points must have the same unit")
-        from .utilities import is_scalar, has_compatible_unit
+        from ..utilities import is_scalar, has_compatible_unit
         if not is_scalar(self.resistivity):
             raise ValueError(f"The provided radius is not a scalar")
         if not has_compatible_unit(self.resistivity, 'Ohm/m'):
@@ -123,7 +123,7 @@ class DiscreteTube(DiscreteWire):
     radius: Variable
 
     def __post_init__(self):
-        from .utilities import is_scalar, has_compatible_unit
+        from ..utilities import is_scalar, has_compatible_unit
         if not is_scalar(self.radius):
             raise ValueError(f"The provided radius is not a scalar")
         if not has_compatible_unit(self.radius, 'm'):
@@ -164,7 +164,7 @@ class DiscreteTube(DiscreteWire):
         return vertices, faces
 
     def extreme_path_corners(self, horizontal: Variable, vertical: Variable, unit=None):
-        from .spatial import combine_extremes
+        from ..spatial import combine_extremes
         v, _ = self.triangulate(unit=unit)
         return combine_extremes([v], horizontal, vertical)
 
@@ -186,7 +186,7 @@ class He3Tube(DiscreteTube):
     pressure: Variable
 
     def __post_init__(self):
-        from .utilities import is_scalar, has_compatible_unit
+        from ..utilities import is_scalar, has_compatible_unit
         if not is_scalar(self.pressure):
             raise ValueError(f"The provided pressure is not a scalar")
         if not has_compatible_unit(self.pressure, 'Pa'):

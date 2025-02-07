@@ -1,5 +1,9 @@
+# SPDX-FileCopyrightText: 2025-present Gregory Tucker <gregory.tucker@ess.eu>
+#
+# SPDX-License-Identifier: MIT
+
+
 from dataclasses import dataclass
-from numpy import ndarray
 from scipp import Variable
 
 
@@ -50,8 +54,8 @@ class IdealCrystal:
 
     @property
     def momentum(self) -> Variable:
-        from scipp import sqrt, dot
-        return sqrt(dot(self.tau, self.tau))
+        from scipp import norm
+        return norm(self.tau)
 
     @property
     def momentum_vector(self) -> Variable:
@@ -64,10 +68,13 @@ class IdealCrystal:
 
     def scattering_angle(self, **kwargs) -> Variable:
         from math import pi, inf
-        from scipp import asin, scalar, isinf, isnan, abs
+        from scipp import asin, scalar, isinf, isnan, abs, norm
+        from ..spatial import __is_vector__
         if len(kwargs) != 1:
             raise RuntimeError("A single keyword argument (k, wavenumber, wavelength) is required")
         k = kwargs.get('k', kwargs.get('wavenumber', 2 * pi / kwargs.get('wavelength', scalar(inf, unit='angstrom'))))
+        if __is_vector__(k):
+            k = norm(k)
         if k.value == 0 or isinf(k) or isnan(k):
             raise RuntimeError("The provided keyword must produce a finite wavenumber")
         t = self.momentum.to(unit=k.unit)
@@ -105,7 +112,7 @@ class Crystal(IdealCrystal):
     orientation: Variable
 
     def triangulate(self, unit=None):
-        from .spatial import vector_to_vector_quaternion
+        from ..spatial import vector_to_vector_quaternion
         from scipp import vectors, vector
         if unit is None:
             unit = self.position.unit
@@ -120,7 +127,7 @@ class Crystal(IdealCrystal):
         return vertices.to(unit=unit) + self.position.to(unit=unit), faces
 
     def extreme_path_corners(self, horizontal: Variable, vertical: Variable, unit=None):
-        from .spatial import combine_extremes
+        from ..spatial import combine_extremes
         v, _ = self.triangulate(unit=unit)
         return combine_extremes([v], horizontal, vertical)
 
