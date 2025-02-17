@@ -56,10 +56,13 @@ class Channel:
         # The detector tube orientation rotation(s) must be modified by the channel rotation:
         detector_orient = relative_rotation * detector_orient
 
-        # coverages = tan(min(ks) * atan(1.0*coverage) / ks)
+        # vp['coverage'] is specified at 2.7 meV as +/- 2 degrees
+        # and higher energies keep constant delta-Q-out-of-plane
+        # this coverage is still only half, since both +/- directions have same Q extent
         coverages = atan(min(ks) * tan(1.0 * vp['coverage']) / ks)
 
-        # print(f"Vertical coverage = {coverages.to(unit='degree'): c}")
+        # print(f"Vertical coverage = {2*coverages.to(unit='degree'):c}")
+        mosaic = vp['crystal_mosaic']
 
         resistance = vp['resistance']
         resistivity = vp['resistivity']
@@ -71,8 +74,9 @@ class Channel:
         if is_scalar(resistivity):
             resistivity = concat((resistivity, resistivity, resistivity), dim='tube')
 
-        orient_per, resistance_per, resistivity_per = ['analyzer' in x.dims for x in
-                                                       (detector_orient, resistance, resistivity)]
+        def idx_or(obj, index):
+            return obj['analyzer', index] if 'analyzer' in obj.dims else obj
+
         pairs = []
         for idx, (ap, tv, dl, ct, cs, cc, gp) in enumerate(zip(
                 analyzer_position, tau_vecs, vp['detector_length'], vp['blade_count'], vp['crystal_shape'], coverages,
@@ -82,11 +86,12 @@ class Channel:
                 sample=sample,
                 blade_count=ct,
                 shape=cs,
+                mosaic=idx_or(mosaic, idx),
                 analyzer_orient=relative_rotation,
                 coverage=cc,
-                detector_orient=detector_orient['analyzer', idx] if orient_per else detector_orient,
-                resistance=resistance['analyzer', idx] if resistance_per else resistance,
-                resistivity=resistivity['analyzer', idx] if resistivity_per else resistivity,
+                detector_orient=idx_or(detector_orient, idx),
+                resistance=idx_or(resistance, idx),
+                resistivity=idx_or(resistivity, idx),
                 gap=gp
             )
             pairs.append(Arm.from_calibration(ap, tv, detector_position['analyzer', idx], dl, **params))
@@ -129,9 +134,9 @@ class Channel:
     def sample_space_angle(self, sample: Variable):
         return self.pairs[0].sample_space_angle(sample)
 
-    def coverage(self, sample: Variable):
+    def coverage(self, sample: Variable, unit=None):
         from scipp import concat, max
-        cov_xy = [x.coverage(sample) for x in self.pairs]
+        cov_xy = [x.coverage(sample, unit=unit) for x in self.pairs]
         cov_x = max(concat([x for x, _ in cov_xy], dim='pairs'))
         cov_y = max(concat([y for _, y in cov_xy], dim='pairs'))
         return cov_x, cov_y

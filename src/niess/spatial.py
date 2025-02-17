@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from scipp import Variable
 
@@ -113,3 +115,82 @@ def perpendicular_directions(direction: Variable):
     vertical = cross(horizontal, direction)
 
     return horizontal, vertical
+
+
+def bounding_box(points: Variable, basis: Variable):
+    """ Find the minimal box with axes along `basis` that contains all `points`
+
+    :param points:
+        3-D vector points representing a continuous object in space
+    :param basis:
+        One or more basis vectors along which to calculate the bounding box.
+        The basis _should_ be orthogonal, normal, and span space; but a projected
+        basis is allowed (less than 3 basis vectors), normalized vectors will be
+        enforced, and orthogonality is not checked.
+    :return:
+        The (2, len(basis)) limiting corners of the bounding box ordered from
+        the minimum corner to the maximum corner; with named axis 'limits'
+    """
+    from scipp import norm, dot, min, max, concat
+    is_scipp_vector(points, 'points')
+    is_scipp_vector(basis, 'basis')
+    basis = basis / norm(basis)
+    if basis.ndim > 1:
+        basis = basis.flatten(to='basis')
+
+    projections = dot(points.flatten(to='points'), basis)
+    lower = min(projections, dim='points')
+    upper = max(projections, dim='points')
+    box = concat((lower, upper), dim='limits')
+    return box.transpose(['limits', basis.dim]) if basis.ndim > 1 else box
+
+
+def combine_bounding_boxes(boxes: Variable, limits: str | None = None, basis: str | None = None):
+    """Find the box which bounds one or more bounding boxes
+
+    A bounding box can be represented as its minimum and maximum corners.
+    This method leverages named `scipp.Variable` axes to identify the corners-axis.
+    To allow dimensional flexibility, the box-axes are handled separately with the
+    `scipp.Variable` axis representing them identified as the basis dimension.
+    Any additional axis or axes are flattened and reduced to find the single
+    all-containing bounding box.
+
+    Params
+    ------
+    boxes:
+        A (N, 2, ...) [or any permutation] array of bounding box limits.
+    limits:
+        The name of the array dimension that identifies the minimum and maximum corner.
+        This dimension must be exactly 2-elements long.
+        Default = 'limits'
+    basis:
+        The name of the array dimension that identifies the box basis, (e_1, e_2, ...).
+        The length of the array in this dimension is the dimensionality of the space.
+        Default = 'basis'
+    Returns
+    -------
+    :
+        The (2, N) all-encompassing bounding box, with limit-dimension and
+        basis-dimension names matching those in the input bound boxes array
+    """
+    from scipp import min, max, concat
+    limits = limits or 'limits'
+    basis = basis or 'basis'
+    if limits not in boxes.dims or 2 != boxes.sizes[limits]:
+        raise ValueError(f'The boxes must have a `limits` ({limits}) axis of length 2')
+    if basis not in boxes.dims:
+        raise ValueError(f'The boxes must have a `basis` ({basis}) axis')
+
+    others = [dim for dim in boxes.dims if dim not in (limits, basis)]
+    if len(others):
+        from uuid import uuid4
+        dim = str(uuid4())
+        box = boxes.transpose([limits, basis, *others]).flatten(dims=others, to=dim)
+        lower = min(box[limits, 0], dim=dim)
+        upper = max(box[limits, 1], dim=dim)
+        box = concat((lower, upper), dim=limits)
+    else:
+        box = boxes
+
+    return box.transpose([limits, basis])
+

@@ -42,24 +42,19 @@ def box_edge_check(vs, x, y, z):
     assert isclose(norm(vs['vertices', 7] - vs['vertices', 3]), scalar(z, unit='m'))
 
 
-def extent_check(corners, direction, extent):
-    from scipp import norm, isclose, min, max, dot
-    hat = direction / norm(direction)
-    h_dot = dot(hat, corners).to(unit=extent.unit)
-    assert isclose(max(h_dot) - min(h_dot), extent)
-
-
-def extrema_check(crystal, horizontal, vertical, horizontal_extent, vertical_extent):
-    corners = crystal.extreme_path_corners(horizontal, vertical)
-    if horizontal_extent is not None:
-        extent_check(corners, horizontal, horizontal_extent)
-    if vertical_extent is not None:
-        extent_check(corners, vertical, vertical_extent)
+def extrema_check(crystal, basis: list, extents: list):
+    from scipp import concat, isclose
+    box = crystal.bounding_box(basis=concat(basis, dim='basis'))
+    lengths = box['limits', 1] - box['limits', 0]
+    for index, extent in enumerate(extents):
+        if extent is not None:
+            assert isclose(lengths['basis', index], extent)
 
 
 def test_crystal():
+    from itertools import permutations
     from niess import Crystal
-    from scipp import scalar, vector, dot, norm, isclose, allclose
+    from scipp import scalar, vector
     from scipp.spatial import rotations_from_rotvecs
 
     x, y, z = 1., 2., 0.01
@@ -67,8 +62,9 @@ def test_crystal():
     tau = vector([0, 0, 1.], unit='1/m')
     shape = vector([x, y, z], unit='m')
     orient = rotations_from_rotvecs(vector([0, 0, 0.], unit='deg'))
+    mosaic = scalar(10., unit='arcminutes')
 
-    crystal = Crystal(pos, tau, shape, orient)
+    crystal = Crystal(pos, tau, shape, orient, mosaic)
 
     vs, triangles = crystal.triangulate()
     expected = [[-x/2, -y/2, -z/2], [x/2, -y/2, -z/2], [x/2, y/2, -z/2], [-x/2, y/2, -z/2],
@@ -77,16 +73,14 @@ def test_crystal():
         assert all(a == b for a, b in zip(v, vs['vertices', index].values))
     box_edge_check(vs, x, y, z)
 
-    vx, vy, vz = [vector(vv, unit='m') for vv in ([1, 0, 0.], [0, 1, 0.], [0, 0, 1.])]
-    extrema_check(crystal, vx, vy, scalar(x, unit='m'), scalar(y, unit='m'))
-    extrema_check(crystal, vy, vz, scalar(y, unit='m'), scalar(z, unit='m'))
-    extrema_check(crystal, vz, vx, scalar(z, unit='m'), scalar(x, unit='m'))
-    extrema_check(crystal, vy, vx, scalar(y, unit='m'), scalar(x, unit='m'))
-    extrema_check(crystal, vx, vz, scalar(x, unit='m'), scalar(z, unit='m'))
-    extrema_check(crystal, vz, vy, scalar(z, unit='m'), scalar(y, unit='m'))
+    v = [vector(vv, unit='m') for vv in ([1, 0, 0.], [0, 1, 0.], [0, 0, 1.])]
+    s = [scalar(xx, unit='m') for xx in (x, y, z)]
+    for p in permutations(range(3), 3):
+        extrema_check(crystal, [v[i] for i in p], [s[i] for i in p])
 
 
 def test_rotated_crystal():
+    from itertools import permutations
     from niess import Crystal
     from scipp import scalar, vector, cos, sin
     from scipp.spatial import rotations_from_rotvecs
@@ -96,8 +90,9 @@ def test_rotated_crystal():
     tau = vector([0, 0, 1.], unit='1/m')
     shape = vector([x, y, z], unit='m')
     orient = rotations_from_rotvecs(vector([0, angle, 0.], unit='deg'))
+    mosaic = scalar(10., unit='arcminutes')
 
-    crystal = Crystal(pos, tau, shape, orient)
+    crystal = Crystal(pos, tau, shape, orient, mosaic)
 
     vs, triangles = crystal.triangulate()
     box_edge_check(vs, x, y, z)
@@ -106,13 +101,9 @@ def test_rotated_crystal():
     xz = scalar(x, unit='m') * c + scalar(z, unit='m') * s
     zx = scalar(z, unit='m') * c + scalar(x, unit='m') * s
 
-    vx, vy, vz = [vector(vv, unit='m') for vv in ([1, 0, 0.], [0, 1, 0.], [0, 0, 1.])]
-    extrema_check(crystal, vx, vy, xz, scalar(y, unit='m'))
-    extrema_check(crystal, vy, vz, scalar(y, unit='m'), zx)
-    extrema_check(crystal, vz, vx, zx, xz)
-    extrema_check(crystal, vy, vx, scalar(y, unit='m'), xz)
-    extrema_check(crystal, vx, vz, xz, zx)
-    extrema_check(crystal, vz, vy, zx, scalar(y, unit='m'))
-
+    v = [vector(vv, unit='m') for vv in ([1, 0, 0.], [0, 1, 0.], [0, 0, 1.])]
+    s = xz, scalar(y, unit='m'), zx
+    for p in permutations(range(3), 3):
+        extrema_check(crystal, [v[i] for i in p], [s[i] for i in p])
 
 

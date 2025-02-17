@@ -115,8 +115,14 @@ class Arm:
     def sample_space_angle(self, sample: Variable):
         return self.analyzer.sample_space_angle(sample)
 
-    def coverage(self, sample: Variable):
-        return self.analyzer.coverage(sample)
+    def coverage(self, sample: Variable, unit=None):
+        # The arm coverage is defined vertically by the analyzer, but the mean
+        # horizontal divergence is defined by the active *detector* length
+        ana_hor, ana_ver = self.analyzer.coverage(sample, unit=unit)
+        det_hor = self.detector.horizontal_coverage(sample, self.analyzer.central_blade.position, unit=unit)
+        if det_hor > ana_hor:
+            print(f'Detector under-illuminated: the detector width {det_hor} should be less than the analyzer width {ana_hor}')
+        return det_hor, ana_ver
 
     def to_mccode(self, assembler: Assembler, ref: Instance, name: str,
                   analyzer_when: str = None, analyzer_extend: str = None,

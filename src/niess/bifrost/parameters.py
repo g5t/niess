@@ -26,9 +26,10 @@ def known_channel_params():
         'l': [[13.5, 150, 1], [15.0, 162, 1], [12.0, 171, 1], [13.0, 180, 1], [14.0, 189, 1]],
     }
     known['crystal_shape'] = {k: vectors(values=v, unit='mm', dims=['analyzer']) for k, v in a_shape_mm.items()}
+    known['crystal_mosaic'] = scalar(40., unit='arcminutes')
     known['blade_count'] = array(values=[7, 7, 9, 9, 9], dims=['analyzer'])  # two lowest energy analyzer have 7 blades
     known['d_spacing'] = scalar(3.355, unit='angstrom')  # PG(002)
-    known['coverage'] = scalar(2., unit='degree')
+    known['coverage'] = scalar(2., unit='degree') # +/- 2 degrees at 2.7 meV, constant delta-Q at higher energies
     known['energy'] = array(values=[2.7, 3.2, 3.8, 4.4, 5.], unit='meV', dims=['analyzer'])
     known['sample'] = vector([0, 0, 0.], unit='m')
     known['gap'] = array(values=[2, 2, 2, 2, 2.], unit='mm', dims=['analyzer'])

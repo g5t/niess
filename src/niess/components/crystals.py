@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025-present Gregory Tucker <gregory.tucker@ess.eu>
 #
 # SPDX-License-Identifier: MIT
-
+from __future__ import annotations
 
 from dataclasses import dataclass
 from scipp import Variable
@@ -110,6 +110,7 @@ class IdealCrystal:
 class Crystal(IdealCrystal):
     shape: Variable  # lengths: (in-scattering-plane perpendicular to Q, perpendicular to plane, along Q)
     orientation: Variable
+    mosaic: Variable
 
     def triangulate(self, unit=None):
         from ..spatial import vector_to_vector_quaternion
@@ -126,10 +127,10 @@ class Crystal(IdealCrystal):
                  [3, 0, 4], [3, 4, 7], [2, 3, 7], [2, 7, 6], [4, 5, 6], [4, 6, 7]]
         return vertices.to(unit=unit) + self.position.to(unit=unit), faces
 
-    def extreme_path_corners(self, horizontal: Variable, vertical: Variable, unit=None):
-        from ..spatial import combine_extremes
+    def bounding_box(self, basis: Variable, unit=None):
+        from ..spatial import bounding_box
         v, _ = self.triangulate(unit=unit)
-        return combine_extremes([v], horizontal, vertical)
+        return bounding_box(v, basis)
 
     def __eq__(self, other):
         if not isinstance(other, Crystal):

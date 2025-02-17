@@ -168,6 +168,11 @@ class DiscreteTube(DiscreteWire):
         v, _ = self.triangulate(unit=unit)
         return combine_extremes([v], horizontal, vertical)
 
+    def bounding_box(self, basis: Variable, unit=None):
+        from ..spatial import bounding_box
+        v, _ = self.triangulate(unit=unit)
+        return bounding_box(v, basis)
+
     def __eq__(self, other):
         if not isinstance(other, DiscreteTube):
             return False

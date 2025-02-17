@@ -29,15 +29,16 @@ class Analyzer:
         shape = params.get('shape', vector([10., 200., 2.], unit='mm'))
         orient = params.get('orient', None)
         orient = rotation(value=[0, 0, 0, 1.]) if orient is None else orient
+        mosaic = params.get('mosaic', scalar(40., unit='arcminutes'))
         # qin_coverage = params.get('qin_coverage', params.get('coverage', scalar(0.1, unit='1/angstrom')))
-        coverage = params.get('coverage', scalar(2, unit='degree'))
+        coverage = params.get('coverage', scalar(2.0, unit='degree'))
         source = params.get('source', params.get('sample_position', vector([0, 0, 0], unit='m')))
         gap = params.get('gap', None)
         #
         # Use the Rowland geometry to define each blade position & normal direction
         positions, taus = rowland_blades(source, position, focus, coverage, shape.fields.x, count.value, tau, gap)
 
-        blades = [Crystal(p, t, shape, orient) for p, t in zip(positions, taus)]
+        blades = [Crystal(p, t, shape, orient, mosaic) for p, t in zip(positions, taus)]
         return Analyzer(tuple(blades))
 
     def triangulate(self, unit=None):
@@ -45,27 +46,26 @@ class Analyzer:
         vts = [blade.triangulate(unit=unit) for blade in self.blades]
         return combine_triangulations(vts)
 
-    def extreme_path_corners(self, horizontal, vertical, unit=None):
-        from ..spatial import combine_extremes
-        vs = [blade.extreme_path_corners(horizontal, vertical, unit=unit) for blade in self.blades]
-        return combine_extremes(vs, horizontal, vertical)
+    def bounding_box(self, basis: Variable, unit=None):
+        from scipp import concat
+        from ..spatial import combine_bounding_boxes
+        boxes = concat(tuple(b.bounding_box(basis, unit) for b in self.blades), dim='blades')
+        return combine_bounding_boxes(boxes)
 
-    def coverage(self, sample: Variable):
-        from scipp import sqrt, dot, cross, max, min, atan2, vector
+    def coverage(self, sample: Variable, unit=None):
+        from scipp import norm, dot, cross, max, min, atan2, vector, concat
+        unit = unit or 'radian'
         # Define a pseudo McStas coordinate system (requiring y is mostly vertical)
         z = (self.central_blade.position - sample)
-        sa_dist = sqrt(dot(z, z))
-        z = z / sa_dist
-        y = vector([0, 1.0, 0])
-        y = cross(cross(z, y), z)  # in case y is not perpendicular to z
-        y = y / sqrt(dot(y, y))
-        x = cross(y, z)
-        x = x / sqrt(dot(x, x))
-
-        # Define the horizontal (along x) and vertical (along y) extreme points of the array
-        xtr = self.extreme_path_corners(x, y)
-        coverages = [atan2(y=(max(dot(xtr, w)) - min(dot(xtr, w))) / 2., x=sa_dist).to(unit='radian') for w in (x, y)]
-        return tuple(coverages)
+        dist = norm(z)
+        z = z / dist
+        y = cross(cross(z, vector([0, 0, 1.0])), z)
+        y = y / norm(y)
+        x = cross(y, z)  # should have length 1 but normalized in bounding_box
+        basis = concat((x, y), dim='basis')
+        box = self.bounding_box(basis, unit=dist.unit)
+        lengths = box['limits', 1] - box['limits', 0]
+        return tuple(atan2(y=e/2, x=dist).to(unit=unit) for e in lengths)
 
     def sample_space_angle(self, sample: Variable):
         from scipp import dot, atan2, vector
@@ -96,7 +96,7 @@ class Analyzer:
             NH=self.count,
             zwidth=perp_q,
             yheight=perp_plane,
-            mosaic='mosaic',
+            mosaic=self.central_blade.mosaic.to(unit='arcminute').value,
             DM=3.355,
             gap=0.002,
             show_construction='showconstruction',
