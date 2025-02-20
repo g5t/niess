@@ -84,7 +84,7 @@ class Triplet:
         bbox = self.tubes[1].bounding_box(horizontal, unit=sample_at.unit)
         width = bbox['limits', 1] - bbox['limits', 0]
         distance = norm(self.tube_com()['tube', 1] - analyzer_at) + norm(analyzer_at - sample_at)
-        return atan2(y=width/2, x=distance).to(unit=unit)
+        return 2 * atan2(y=width/2, x=distance).to(unit=unit)
 
     def tube_com(self):
         from scipp import concat

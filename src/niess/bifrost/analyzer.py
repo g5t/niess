@@ -65,7 +65,7 @@ class Analyzer:
         basis = concat((x, y), dim='basis')
         box = self.bounding_box(basis, unit=dist.unit)
         lengths = box['limits', 1] - box['limits', 0]
-        return tuple(atan2(y=e/2, x=dist).to(unit=unit) for e in lengths)
+        return tuple(2 * atan2(y=e/2, x=dist).to(unit=unit) for e in lengths)
 
     def sample_space_angle(self, sample: Variable):
         from scipp import dot, atan2, vector

@@ -300,7 +300,6 @@ class IndirectSecondary:
 
         return delta_a4
 
-
     def broadcast_continuous_final_distance(self, detector_index: Variable, ratio: Variable):
         from scipp import sqrt
         values = self._broadcast_continuous_common(detector_index, ratio)

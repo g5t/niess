@@ -7,7 +7,7 @@ class Tank:
     from mccode_antlr.assembler import Assembler
     from mccode_antlr.instr import Instance
 
-    channels: tuple[Channel, Channel, Channel, Channel, Channel, Channel, Channel, Channel, Channel]
+    channels: tuple[Channel, ...]
 
     @staticmethod
     def from_calibration(**params):
@@ -78,28 +78,14 @@ class Tank:
         vts = [channel.triangulate(unit=unit) for channel in self.channels]
         return combine_triangulations(vts)
 
-    def extreme_path_edges(self, sample: Variable):
-        from scipp import concat
-        from numpy import vstack, hstack, cumsum
-        ves = [channel.extreme_path_edges(sample) for channel in self.channels]
-        # ... deduplicate repeated sample position ...
-        # offset the edge indexes to account for to-be-concatenated vertices
-        offset = hstack((0, cumsum([len(v) for v, _ in ves])))[:-1]
-        edges = vstack([e + o for (v, e), o in zip(ves, offset)])
-        # concatenate the vertices
-        vertices = concat([v for v, _ in ves], 'vertices')
-        return vertices, edges
-
-
     def mcstas_parameters(self, sample: Variable):
-        from numpy import stack, hstack
-        parameters = [channel.mcstas_parameters(sample) for channel in self.channels]
-        y = stack([p['distances'] for p in parameters], axis=0)  # (9, 5, 2)
-        a = stack([p['analyzer'] for p in parameters], axis=0)  # (9, 5, 6)
-        d = stack([p['detector'] for p in parameters], axis=0)  # (9, 5, 3, 2, 3)
-        t = stack([p['two_theta'] for p in parameters], axis=0)  # (9, 5)
-        s = hstack([channel.sample_space_angle(sample).value for channel in self.channels])
-        return {'distances': y, 'analyzer': a, 'detector': d, 'channel': s, 'two_theta': t}
+        from numpy import hstack
+        from .combine import combine_parameters
+        # pull out the list of 'distances', 'analyzer', 'detector', 'two_theta'
+        # from each channel, and stack them into a single array per parameters
+        parameters = combine_parameters(self.channels, sample)
+        parameters['channel'] = hstack([channel.sample_space_angle(sample).value for channel in self.channels])
+        return parameters
 
     def rtp_parameters(self, sample: Variable):
         from scipp import concat

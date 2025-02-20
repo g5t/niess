@@ -42,8 +42,8 @@ def test_bifrost_tank_calibratable():
             # coverage, with exact values following `vertical` above ... or calculated
             # from the ratio of kf values
             expected = scalar(vertical[index], unit='deg').to(unit=ver_cov.unit)
-            assert 2 * ver_cov >= expected
-            assert isclose(2 * ver_cov, expected, atol=scalar(0.1, unit='deg'))
+            assert ver_cov >= expected
+            assert isclose(ver_cov, expected, atol=scalar(0.1, unit='deg'))
             # The analyzers have sufficient width to fully illuminate their detector
             # tubes, which means they are _wider_ than the detectors to account for
             # the finite crystal mosaic.
@@ -51,8 +51,8 @@ def test_bifrost_tank_calibratable():
             # The detectors each cover (at least) 5.2 degrees horizontally for all energies
             # So the analyzer should be at least 5.2 + mosaic
             expected = mosaic + horizontal.to(unit=hor_cov.unit)
-            assert 2 * hor_cov >= expected
-            assert isclose(2 * hor_cov, expected, atol=scalar(1.2, unit='deg'))
+            assert hor_cov >= expected
+            assert isclose(hor_cov, expected, atol=scalar(1.2, unit='deg'))
 
             # We can also extract the detector effective horizontal coverage
             # since we know the sample-to-analyzer and analyzer-to-detector distances:
@@ -63,7 +63,7 @@ def test_bifrost_tank_calibratable():
             # which should be much closer to the expected value of 5.2 degrees
             # but since the current parameters are the total length instead of the
             # _active_ length, this coverage is slightly too big
-            assert isclose(2 * arm_hor, horizontal, atol=scalar(0.6, unit='deg'))
+            assert isclose(arm_hor, horizontal, atol=scalar(0.6, unit='deg'))
 
 
 

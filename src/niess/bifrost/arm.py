@@ -34,28 +34,6 @@ class Arm:
         from ..spatial import combine_triangulations
         return combine_triangulations([self.triangulate_analyzer(unit=unit), self.triangulate_detector(unit=unit)])
 
-    def extreme_path_edges(self, sample: Variable):
-        from scipp import concat
-        from numpy import array as numpy_array, int as numpy_int
-        from ..spatial import is_scipp_vector, perpendicular_directions
-        is_scipp_vector(sample, 'sample')
-        a_pos = self.analyzer.central_blade.position.to(unit=sample.unit)
-        d_pos = 0.5 * (self.detector.tubes[1].at + self.detector.tubes[1].to).to(unit=sample.unit)
-
-        at_analyzer = self.analyzer.extreme_path_corners(*perpendicular_directions(a_pos - sample), unit=sample.unit)
-        at_detector = self.detector.extreme_path_corners(*perpendicular_directions(d_pos - a_pos), unit=sample.unit)
-
-        laa = len(at_analyzer)
-        lad = len(at_detector)
-        edges = [[0, 1 + a] for a in range(laa)]
-        # ... filter out edges which intersect anywhere other than {sample} ?
-        # TODO This requires identifying the Convex Hull and then line segments which are inside the polyehedron
-        edges.extend([[1 + a, 1 + laa + d] for a in range(laa) for d in range(lad)])
-        # ... filter out new edges which are non-divergent
-
-        vertices = concat((sample, at_analyzer, at_detector), 'vertices')
-        return vertices, numpy_array(edges, dtype=numpy_int)
-
     def mcstas_parameters(self, sample: Variable):
         from numpy import stack, hstack
         from scipp import sqrt, dot, cross, vector, acos

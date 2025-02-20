@@ -110,26 +110,9 @@ class Channel:
         from ..spatial import combine_triangulations
         return combine_triangulations([arm.triangulate(unit=unit) for arm in self.pairs])
 
-    def extreme_path_edges(self, sample: Variable):
-        from scipp import concat
-        from numpy import vstack, hstack, cumsum
-        ves = [pair.extreme_path_edges(sample) for pair in self.pairs]
-        # ... deduplicate repeated sample position ...
-        # offset the edge indexes to account for to-be-concatenated vertices
-        offset = hstack((0, cumsum([len(v) for v, _ in ves])))[:-1]
-        edges = vstack([e + o for (v, e), o in zip(ves, offset)])
-        # concatenate the vertices
-        vertices = concat([v for v, _ in ves], 'vertices')
-        return vertices, edges
-
     def mcstas_parameters(self, sample: Variable):
-        from numpy import stack
-        parameters = [arm.mcstas_parameters(sample) for arm in self.pairs]
-        distances = stack([p['distances'] for p in parameters], axis=0)  # (5 ,2)
-        analyzers = stack([p['analyzer'] for p in parameters], axis=0)  # (5, 6)
-        detectors = stack([p['detector'] for p in parameters], axis=0)  # (5, 3, 2, 3)
-        two_theta = stack([p['two_theta'] for p in parameters], axis=0)  # (5, )
-        return {'distances': distances, 'analyzer': analyzers, 'detector': detectors, 'two_theta': two_theta}
+        from .combine import combine_parameters
+        return combine_parameters(self.pairs, sample)
 
     def sample_space_angle(self, sample: Variable):
         return self.pairs[0].sample_space_angle(sample)

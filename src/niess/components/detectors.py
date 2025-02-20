@@ -163,11 +163,6 @@ class DiscreteTube(DiscreteWire):
         faces.extend(top)
         return vertices, faces
 
-    def extreme_path_corners(self, horizontal: Variable, vertical: Variable, unit=None):
-        from ..spatial import combine_extremes
-        v, _ = self.triangulate(unit=unit)
-        return combine_extremes([v], horizontal, vertical)
-
     def bounding_box(self, basis: Variable, unit=None):
         from ..spatial import bounding_box
         v, _ = self.triangulate(unit=unit)
