@@ -66,7 +66,25 @@ def test_bifrost_tank_calibratable():
             assert isclose(arm_hor, horizontal, atol=scalar(0.6, unit='deg'))
 
 
+def test_bifrost_tank_angles():
+    """The main purpose of this test is to show how to get the (horizontal)
+    scattering limit boundaries for a single setting of the tank position"""
+    from scipp import vector, concat, scalar
+    from niess.bifrost import Tank
+    from niess.bifrost.parameters import known_channel_params
+    params = known_channel_params()
+    tank = Tank.from_calibration(**params)
 
+    sample = vector(value=[0, 0, 0], unit='m')
 
+    def a4_limits(ch):
+        center = ch.sample_space_angle(sample).to(unit='deg')
+        da4, _ = ch.coverage(sample, unit='deg')
+        return center - da4/2, center + da4/2
 
+    limits = [a4_limits(ch) for ch in tank.channels]
 
+    flat = concat([x for l in limits for x in l], 'limits')
+    # verify that the limits increase monotonically
+    changes = flat[1:] - flat[:-1]
+    assert all(c > scalar(0, unit='deg') for c in changes)
