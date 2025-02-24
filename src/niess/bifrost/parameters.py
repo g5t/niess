@@ -39,6 +39,12 @@ def known_channel_params():
     known['contact_resistance'] = scalar(0., unit='Ohm')
     known['resistivity'] = scalar(200., unit='Ohm/in').to(unit='Ohm/m')
 
+    known['elastic_monitor_length'] = scalar(100., unit='mm')
+    known['elastic_monitor_width'] = scalar(10., unit='mm')
+    known['sample_elastic_monitor_distance'] = scalar(800., unit='mm')
+    known['tank_elastic_monitor_angle'] = scalar(45., unit='deg')
+    known['elastic_monitor_pressure'] = scalar(10., unit='atm')
+
     return known
 
 

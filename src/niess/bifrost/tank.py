@@ -1,5 +1,34 @@
 from dataclasses import dataclass
 
+import scipp
+
+from niess import He3Tube
+
+def _tube_at(distance, rotation_y, length, radius, resistivity, elements, pressure):
+    from scipp import vector
+    from scipp.spatial import rotations_from_rotvecs
+    y, z = vector([0, 1, 0]), vector([0, 0, 1])
+    r = rotations_from_rotvecs(y * rotation_y)
+    pos = r * (z * distance)
+    top = pos + length * y / 2
+    bottom = pos - length * y / 2
+    return He3Tube(at=bottom, to=top, radius=radius, resistivity=resistivity, elements=elements, pressure=pressure)
+
+
+def _elastic_monitor_from_params(params):
+    from scipp import scalar
+    # There is a possibility that some or all necessary parameters are missing
+    # but there are not always good defaults to provide in all cases. What do we do?
+    distance = params.get('sample_elastic_monitor_distance', scalar(0., unit='m'))
+    angle = params.get('tank_elastic_monitor_angle', scalar(0., unit='deg'))
+    length = params.get('elastic_monitor_length', scalar(0., unit='m'))
+    radius = params.get('elastic_monitor_radius', params.get('elastic_monitor_width', scalar(0., unit='m') / 2))
+    resistivity = scalar(1., unit='Ohm/cm')
+    pressure = params.get('elastic_monitor_pressure', scalar(1., unit='atm'))
+    mon = _tube_at(distance, angle, length, radius, resistivity, 1, pressure)
+    return mon
+
+
 @dataclass
 class Tank:
     from scipp import Variable
@@ -8,10 +37,11 @@ class Tank:
     from mccode_antlr.instr import Instance
 
     channels: tuple[Channel, ...]
+    monitor: He3Tube
 
     @staticmethod
     def from_calibration(**params):
-        from scipp import array
+        from scipp import array, scalar
         from .channel import Channel
 
         channel_params = [{'variant': x} for x in ('s', 'm', 'l')]
@@ -23,7 +53,7 @@ class Tank:
                             array(values=[-40, -30, -20, -10, 0, 10, 20, 30, 40.], unit='degree', dims=['channel']))
 
         channels = [Channel.from_calibration(angles[i], **channel_params[i]) for i in range(9)]
-        return Tank(tuple(channels))
+        return Tank(tuple(channels), _elastic_monitor_from_params(params))
 
     @staticmethod
     def unique_from_calibration(**params):
@@ -38,7 +68,7 @@ class Tank:
                             array(values=[-40, -30, -20, -10, 0, 10, 20, 30, 40.], unit='degree', dims=['channel']))
 
         channels = [Channel.from_calibration(angles[i], **channel_params[i]) for i in range(3)]
-        return Tank(tuple(channels))
+        return Tank(tuple(channels), _elastic_monitor_from_params(params))
 
     def to_secondary(self, **params):
         from scipp import vector
