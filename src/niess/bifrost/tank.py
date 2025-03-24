@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-
-import scipp
+from niess.utilities import calibration
 
 from niess import He3Tube
 
@@ -40,7 +39,8 @@ class Tank:
     monitor: He3Tube
 
     @staticmethod
-    def from_calibration(**params):
+    @calibration
+    def from_calibration(params: dict):
         from scipp import array, scalar
         from .channel import Channel
 
@@ -128,7 +128,7 @@ class Tank:
 
         origin = vector([0, 0, 0], unit='m')
         positions = [c.sample_space_angle(origin).to(unit='radian').value for c in self.channels]
-        cov_xy = [c.coverage(origin) for c in self.channels]
+        cov_xy = [c.coverage(origin, unit='radian') for c in self.channels]
         cov_x = 2 * max(concat([y for _, y in cov_xy], dim='channel')).value
 
         slits_name = 'slits'
