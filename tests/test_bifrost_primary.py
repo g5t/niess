@@ -193,3 +193,15 @@ def test_primary_serialize_deserialize():
     pdict = serializable(asdict(primary))
     ddict = loads(dumps(pdict, indent=4))
     assert compare(pdict, ddict)
+
+
+def test_primary_without_parameters():
+    from niess.bifrost.primary import Primary
+    from niess.bifrost.parameters import primary_parameters
+    from niess.utilities import serializable
+    from dataclasses import asdict
+    p0 = Primary.from_calibration()
+    pp = Primary.from_calibration(primary_parameters())
+    d0 = serializable(asdict(p0))
+    dp = serializable(asdict(pp))
+    assert d0 == dp

@@ -165,11 +165,11 @@ def calibration_input(*args, **kwargs):
 
 
 def calibration(func):
-    """A decorator for, e.g. a `@classmethod` decorated Class method which is the
-    from_calibration function for the class to handle input collation"""
+    """A decorator for, e.g. a `@classmethod` or @static decorated Class method which
+    is the from_calibration function for the class to handle input collation"""
     def wrapper(*args, **kwargs):
-        if len(args) > 1:
-             # ensure we have (class, dict) or similar?
-            return func(*args[:-1], calibration_input(args[-1], **kwargs))
+        if len(args) and isinstance(args[0], type):
+            # this is the @classmethod form, where args[0] _is_ the class
+            return func(args[0], calibration_input(*args[1:], **kwargs))
         return func(calibration_input(*args, **kwargs))
     return wrapper

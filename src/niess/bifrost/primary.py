@@ -13,6 +13,7 @@ from ..components import (
     EllipticGuide, StraightGuide, StraightGuides, TaperedGuides,
     FissionChamber, BeamCurrentMonitor, GEM2D, ESSource
 )
+from ..utilities import calibration
 
 @dataclass
 class Primary(Section):
@@ -156,5 +157,10 @@ class Primary(Section):
 
     sample_origin: Component
 
-
-
+    @classmethod
+    @calibration
+    def from_calibration(cls, parameters: dict):
+        from .parameters import primary_parameters
+        if len(parameters) == 0:
+            parameters = primary_parameters()
+        return super().from_calibration(parameters)
