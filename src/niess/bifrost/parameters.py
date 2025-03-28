@@ -103,7 +103,7 @@ def primary_parameters():
     radius = 350 * mm
     offset = -(radius - bunker_chopper_height / 2) * vector([0, 1., 0])
     p['pulse_shaping_chopper_1'] = {
-        'position': at_relative_dict(p['nose'], (0.0306 * m) * z) - offset,
+        'position': at_relative(p['nose']['end'], p['nose']['orientation'], (0.0306 * m) * z) - offset,
         'orientation': p['nose']['orientation'],
         'radius': radius,
         'height': bunker_chopper_height,
@@ -128,8 +128,9 @@ def primary_parameters():
     # the gap from the end of the nose-guide to the start of the first curved guide
     # segment inside the PSC housing is 84 mm
     element_6_to_element_5 = 84 * mm
-    rel_p = at_relative_dict(p['nose'], element_6_to_element_5 * z)
     rel_r = p['nose']['orientation']
+    rel_p = at_relative(p['nose']['end'], rel_r, element_6_to_element_5 * z)
+
     # Element 6 in the old McStas instrument is the curved section. It includes
     # the first and second frame overlap choppers and a copper-substrate 'collimation'
     # section which helps prevent streaming

@@ -57,14 +57,15 @@ def guide_unit_parameters():
         45774: {'l': 1999.75 * mm, 'o': -3469.03 * mm, 'h': 1.5, 'v': 1.5},
         45775: {'l': 1465.28 * mm, 'o': -1465.28 * mm, 'h': 1.5, 'v': 1.5},
     }
+    # The definition of offset used by SwissNeutronics is opposite the McStas definition
     pars = {
         k: {
             'length': v['l'],
             'vertical': {
-                'major': 29352.6625 * mm, 'minor': 45 * mm, 'offset': v['o']
+                'major': 29352.6625 * mm, 'minor': 45 * mm, 'offset': -v['o']
             },
             'horizontal': {
-                'major': 28638.5425 * mm, 'minor': 30 * mm, 'offset': v['o']
+                'major': 28638.5425 * mm, 'minor': 30 * mm, 'offset': -v['o']
             },
             'left': v['h'],
             'right': v['h'],

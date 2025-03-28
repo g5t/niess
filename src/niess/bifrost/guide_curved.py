@@ -1,7 +1,6 @@
-from scipp import Variable
+from scipp import Variable, scalar
 
 from niess.spatial import at_relative_dict
-
 
 def radius_of_curvature_to_rotation_angle(distance: Variable, radius_of_curvature: Variable) -> Variable:
     """
@@ -44,50 +43,45 @@ def guide_rotated_position(axis: Variable, width: Variable, rot: Variable) -> Va
     #                     distance = 2 * width/2 * sin(angle/2)
     # -> Find the angle of half of the rotation, take its sin, multipy by the width
     # scalar part of quaternion = cos(angle/2)
-    distance = width * sin(acos(scalar(half_rotation(rot).value[-1])))
+    distance = 2 * width * sin(acos(scalar(half_rotation(rot).value[-1])))
     return distance * (rot * axis)
-
-
-def radius_of_curvature_to_next_point(point: Variable, distance: Variable, width: Variable, radius_of_curvature: Variable) -> Variable:
-    """
-    Find the location of this guide relative to the previous guide end
-
-    :param point: the location of the end of the previous guide element
-    :param distance: the length of this guide element
-    :param width: the width of both guides in the direction perpendicular
-    :param radius_of_curvature: the radius of curvature of the whole guide system
-    :return: the position of this guide that, when rotated, the two guides touch at
-             their inner corner
-    """
-    from scipp import vector
-    axis = vector([0, 0, 1.])
-    rotation = radius_of_curvature_to_rotation(distance, radius_of_curvature)
-    offset = guide_rotated_position(axis, width, rotation)
-    return point + offset
 
 
 def curved_guide_unit_dictionary(start_at, start_rot, lengths, name, radius_of_curvature, **consts):
     """consts _must_ include 'width' and 'height'"""
-    from scipp import vector
+    from scipp import vector, scalar
+    um = scalar(1.0, unit='micrometer').to(unit='m')
     # The local guide direction is _always_ [001]
     z = vector([0, 0, 1.])
+    x = vector([1., 0, 0])
     d = {
         f'{name}_guide_{i}': {'length': length, **consts}
         for i, length in enumerate(lengths)
     }
+
+    def end_corner_rot(which):
+        w = d[which]
+        ll, ww, rt = [w[n] for n in ('length', 'width', 'orientation')]
+        return at_relative_dict(w, ll * z + ww * x), rt
+
     this = f'{name}_guide_0'
     d[this]['position'] = start_at
     d[this]['orientation'] = start_rot
-    end = at_relative_dict(d[this], d[this]['length'] * z)
-    end_rot = d[this]['orientation']
     for i, length in enumerate(lengths[1:]):
-        prev = this
+        corner, rot = end_corner_rot(this)
         this = f'{name}_guide_{i+1}'
-        d[this]['position'] = radius_of_curvature_to_next_point(end, length, d[this]['width'], radius_of_curvature)
-        d[this]['orientation'] = radius_of_curvature_to_rotation(length, radius_of_curvature) * d[prev]['orientation']
-        end = at_relative_dict(d[this], d[this]['length'] * z)
-        end_rot = d[this]['orientation']
-    return d, end, end_rot
+        new_rot = radius_of_curvature_to_rotation(length, radius_of_curvature)
+        tot_rot = new_rot * rot
+        width = d[this]['width']
+        d[this]['position'] = corner + tot_rot * (-width * x)
+        d[this]['orientation'] = tot_rot
+    end = at_relative_dict(d[this], d[this]['length'] * z)
+
+    # Fudge the guide length to ensure there's no overlap on the inner corners
+    for n in d:
+        d[n]['length'] -= 10 * um
+
+    return d, end, d[this]['orientation']
 
 
 def curved_guide_partial_dict(ref_p, ref_r, radius, table, lengths, min_unit, max_unit, **consts):

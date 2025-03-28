@@ -88,7 +88,7 @@ class DiscChopper(Chopper):
     def to_mccode(self, assembler: Assembler):
         from ..mccode import ensure_runtime_line as ensure
         ensure(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
-        ensure(assembler, f'{self.name}phase/"degree" {self.phase.to(unit="deg").value}')
+        ensure(assembler, f'{self.name}phase/"degree" = {self.phase.to(unit="deg").value}')
         # the offset is handled by super's to_mccode -- no problems.
         return super().to_mccode(assembler)
 

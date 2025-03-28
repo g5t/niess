@@ -87,7 +87,7 @@ def primary_compressor_parameters(guide_start_vec, guide_start_rot) -> dict:
     nboa_segments = array(values=[0.48844444, 0.48844444, 0.48844444, 0.48844444,
                                   0.48844444, 0.48844444, 0.48844444, 0.06121889],
                           dims=['segments'], unit='m')
-    nboa_bbg_gap = scalar(0.2349, unit='m')
+    nboa_bbg_gap = scalar(0.02349, unit='m')
     bbg_nose_gap = scalar(0.015, unit='m')
     # NBOA parameters from original file included the BBG and PSC Nose lengths
     # plus gaps (including windows) -- account for the extra 'missing' lengths here:

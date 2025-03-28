@@ -95,3 +95,13 @@ class ESSource(Source):
             pars['power'] = self.accelerator_power.to(unit='MW').value
 
         return 'ESS_butterfly', pars
+
+    def to_mccode(self, assembler):
+        from dataclasses import fields
+        from ..mccode import ensure_runtime_parameter
+        for field in fields(self):
+            p = getattr(self, field.name)
+            if isinstance(p, InstrumentParameter):
+                ensure_runtime_parameter(assembler, p)
+        return super().to_mccode(assembler)
+
