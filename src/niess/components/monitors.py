@@ -146,7 +146,9 @@ class GEM2D(Component):
     def __mccode__(self) -> tuple[str, dict]:
         from scipp import scalar
         source_frequency = scalar(14.0, unit='Hz')
-        nt = 1000 # 71.42 µs bins
+        # nt = 1000 # 71.42 µs bins
+        nt = 10000 # 7.142 µs bins
+        # nt = 71428 # 1.00001 µs bins
         p = {
             'xwidth': self.width.to(unit='m').value,
             'yheight': self.height.to(unit='m').value,
