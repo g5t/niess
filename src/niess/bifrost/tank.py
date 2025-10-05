@@ -1,31 +1,29 @@
 from dataclasses import dataclass
 from niess.utilities import calibration
-
-from niess import He3Tube
-
-def _tube_at(distance, rotation_y, length, radius, resistivity, elements, pressure):
-    from scipp import vector
-    from scipp.spatial import rotations_from_rotvecs
-    y, z = vector([0, 1, 0]), vector([0, 0, 1])
-    r = rotations_from_rotvecs(y * rotation_y)
-    pos = r * (z * distance)
-    top = pos + length * y / 2
-    bottom = pos - length * y / 2
-    return He3Tube(at=bottom, to=top, radius=radius, resistivity=resistivity, elements=elements, pressure=pressure)
+from niess.components import He3Monitor
 
 
 def _elastic_monitor_from_params(params):
-    from scipp import scalar
+    from scipp import vector
+    from scipp.spatial import rotations_from_rotvecs
+    from .parameters import tank_parameters
+    tp = tank_parameters()
+    def par_or(par):
+        return tp[par] if par not in params else params[par]
+
     # There is a possibility that some or all necessary parameters are missing
     # but there are not always good defaults to provide in all cases. What do we do?
-    distance = params.get('sample_elastic_monitor_distance', scalar(0., unit='m'))
-    angle = params.get('tank_elastic_monitor_angle', scalar(0., unit='deg'))
-    length = params.get('elastic_monitor_length', scalar(0., unit='m'))
-    radius = params.get('elastic_monitor_radius', params.get('elastic_monitor_width', scalar(0., unit='m') / 2))
-    resistivity = scalar(1., unit='Ohm/cm')
-    pressure = params.get('elastic_monitor_pressure', scalar(1., unit='atm'))
-    mon = _tube_at(distance, angle, length, radius, resistivity, 1, pressure)
-    return mon
+    distance = par_or('sample_elastic_monitor_distance')
+    angle = par_or('tank_elastic_monitor_angle')
+    y, z = vector([0, 1, 0]), vector([0, 0, 1])
+    ori = rotations_from_rotvecs(y * angle)  # is this the monitor orientation too?
+
+    cal = par_or('elastic_monitor')
+    cal['name'] = cal.get('name', 'elastic_monitor')
+    cal['position'] = cal.get('position', ori * (z * distance))
+    cal['orientation'] = cal.get('orientation', ori)
+
+    return He3Monitor.from_calibration(cal)
 
 
 @dataclass
@@ -36,14 +34,15 @@ class Tank:
     from mccode_antlr.instr import Instance
 
     channels: tuple[Channel, ...]
-    monitor: He3Tube
+    monitor: He3Monitor
 
     @staticmethod
     @calibration
-    def from_calibration(params: dict):
-        from scipp import array, scalar
+    def from_calibration(cal: dict):
+        from scipp import array
         from .channel import Channel
-
+        from .parameters import known_channel_params
+        params = cal.get('channels', known_channel_params())
         channel_params = [{'variant': x} for x in ('s', 'm', 'l')]
         channel_params = {i: channel_params[i % 3] for i in range(9)}
         # but this can be overridden by specifying an integer-keyed dictionary with the parameters for each channel
@@ -53,7 +52,7 @@ class Tank:
                             array(values=[-40, -30, -20, -10, 0, 10, 20, 30, 40.], unit='degree', dims=['channel']))
 
         channels = [Channel.from_calibration(angles[i], **channel_params[i]) for i in range(9)]
-        return Tank(tuple(channels), _elastic_monitor_from_params(params))
+        return Tank(tuple(channels), _elastic_monitor_from_params(cal))
 
     @staticmethod
     def unique_from_calibration(**params):
@@ -145,3 +144,7 @@ class Tank:
             when = f"{1 + index} == secondary_cassette"
             channel.to_mccode(assembler, sample, name=name, when=when, settings=settings, **kwargs)
 
+        # only if a ray did not enter one of the channels does it have any chance
+        # of hitting the Bragg peak monitor:
+        mon = self.monitor.to_mccode(assembler)
+        mon.WHEN('secondary_cassette == -1')
