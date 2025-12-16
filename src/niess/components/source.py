@@ -1,8 +1,9 @@
 from typing import Optional, Union
 
 from scipp import Variable
-
+from mccode_antlr.instr import Instance
 from mccode_antlr.common.parameters import InstrumentParameter
+from mccode_antlr.assembler import Assembler
 from .component import Component
 
 
@@ -58,10 +59,25 @@ class ESSource(Source):
         n_pulses = cal.get('n_pulses', None)
         accelerator_power = cal.get('accelerator_power', None)
 
-        return cls(name, position, orientation, sector, beamline, height, cold_frac,
-                   focus_distance, focus_width, focus_height, cold_performance,
-                   thermal_performance, wavelength_minimum, wavelength_maximum,
-                   latest_emission_time, n_pulses, accelerator_power)
+        return cls(
+            name=name,
+            position=position,
+            orientation=orientation,
+            sector=sector,
+            beamline=beamline,
+            height=height,
+            cold_frac=cold_frac,
+            focus_distance=focus_distance,
+            focus_width=focus_width,
+            focus_height=focus_height,
+            cold_performance=cold_performance,
+            thermal_performance=thermal_performance,
+            wavelength_minimum=wavelength_minimum,
+            wavelength_maximum=wavelength_maximum,
+            latest_emission_time=latest_emission_time,
+            n_pulses=n_pulses,
+            accelerator_power=accelerator_power
+        )
 
     def __mccode__(self) -> tuple[str, dict]:
         from ..utilities import variable_value_or_parameter as value_or
@@ -90,11 +106,14 @@ class ESSource(Source):
 
         return 'ESS_butterfly', pars
 
-    def to_mccode(self, assembler):
+    def to_mccode(
+            self, assembler: Assembler,
+            at: Instance | str | None = None, rotate: Instance | str | None = None,
+    ):
         from ..mccode import ensure_runtime_parameter
         for field in self.fields():
             p = getattr(self, field)
             if isinstance(p, InstrumentParameter):
                 ensure_runtime_parameter(assembler, p)
-        return super().to_mccode(assembler)
+        return super().to_mccode(assembler, at, rotate)
 

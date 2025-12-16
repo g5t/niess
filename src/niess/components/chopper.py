@@ -1,6 +1,6 @@
 from scipp import Variable
 from .component import Component
-
+from mccode_antlr.instr import Instance
 from mccode_antlr.assembler import Assembler
 
 
@@ -58,7 +58,18 @@ class DiscChopper(Chopper):
         width = cal.get('width') # None is actually acceptable
         height = cal.get('height')  # None is acceptable, then slit extends to center
         offset = cal.get('offset', vector([0, 0, 0], unit='m'))
-        return cls(name, position, orientation, velocity, phase, radius, windows, width, height, offset)
+        return cls(
+            name=name,
+            position=position,
+            orientation=orientation,
+            velocity=velocity,
+            phase=phase,
+            radius=radius,
+            windows=windows,
+            width=width,
+            height=height,
+            offset=offset
+        )
 
 
     def __mccode__(self) -> tuple[str, dict]:
@@ -83,12 +94,15 @@ class DiscChopper(Chopper):
             params['yheight'] = self.height.to(unit='m').value
         return 'DiskChopper', params
 
-    def to_mccode(self, assembler: Assembler):
+    def to_mccode(
+            self, assembler: Assembler,
+            at: Instance | str | None = None, rotate: Instance | str | None = None,
+    ):
         from ..mccode import ensure_runtime_line as ensure
         ensure(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
         ensure(assembler, f'{self.name}phase/"degree" = {self.phase.to(unit="deg").value}')
         # the offset is handled by super's to_mccode -- no problems.
-        return super().to_mccode(assembler)
+        return super().to_mccode(assembler, at, rotate)
 
 
 class FermiChopper(Chopper):

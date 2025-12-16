@@ -3,6 +3,7 @@ from __future__ import annotations
 from scipp import Variable
 from .component import Component
 from mccode_antlr.assembler import Assembler
+from mccode_antlr.instr import Instance
 
 
 class Filter(Component):
@@ -33,7 +34,16 @@ class Filter(Component):
         temperature = cal.get('temperature', s(300., unit='K'))
         position = cal.get('position', v([0, 0, 0.], unit='m'))
         orientation = cal.get('orientation', r(v([0.,0, 0], unit='deg')))
-        return cls(name, position, orientation, width, height, length, composition, temperature)
+        return cls(
+            name=name,
+            position=position,
+            orientation=orientation,
+            width=width,
+            height=height,
+            length=length,
+            composition=composition,
+            temperature=temperature
+        )
 
     def __mccode__(self) -> tuple[str, dict]:
         params = dict()
@@ -65,11 +75,14 @@ class Attenuator(Filter):
     |  AKA Plexiglass, Lucite, Perspex, acrylic, etc.  |                          |
     | Polycarbonate                                    | 'Polycarbonate_C16O3H14' |
     """
-    def to_mccode(self, assembler: Assembler):
+    def to_mccode(
+            self, assembler: Assembler,
+            at: Instance | str | None = None, rotate: Instance | str | None = None,
+    ):
         from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType, ObjectType, ShapeType
         parameter = InstrumentParameter.parse(f"int {self.name}_in = 0")
         assembler.instrument.add_parameter(parameter, ignore_repeated=True)
-        comp = super().to_mccode(assembler)
+        comp = super().to_mccode(assembler, at, rotate)
         var = Value(parameter.name, DataType.int, ObjectType.parameter, ShapeType.scalar)
         comp.WHEN(Expr(var))
         return comp
@@ -77,4 +90,8 @@ class Attenuator(Filter):
 
 def make_aluminum(name, position, orientation, width, height, length):
     from scipp import scalar
-    return Filter(name, position, orientation, width, height, length, 'Al_sg225', scalar(300, unit='K'))
+    return Filter(
+        name=name, position=position, orientation=orientation,
+        width=width, height=height, length=length,
+        composition='Al_sg225', temperature=scalar(300, unit='K')
+    )
