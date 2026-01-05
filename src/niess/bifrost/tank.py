@@ -153,17 +153,22 @@ class Tank(Base):
         slits.set_parameters(slit_width=cov_x, offset='slitAngle*DEG2RAD',
                              number=len(self.channels), radius='slitDistance', height=0.2,
                              positions=declared_positions)
+        # `slit` is 0-8 iff scattered.
+        # This could be `secondary_cassette = 1 + slit;` unambiguously
         slits.EXTEND("secondary_cassette = (SCATTERED) ? 1 + slit : -1;")
+        # We must use a group with the monitor to avoid absorbing rays which could hit
+        # there
+        slits.GROUP('slits_and_monitor')
+
+        mon = self.monitor.to_mccode(assembler, at=sample)
+        mon.GROUP('slits_and_monitor')
 
         for index, channel in enumerate(self.channels):
             name = f"channel_{1 + index}"
             when = f"{1 + index} == secondary_cassette"
             channel.to_mccode(assembler, sample, name=name, when=when, settings=settings, **kwargs)
 
-        # only if a ray did not enter one of the channels does it have any chance
-        # of hitting the Bragg peak monitor:
-        mon = self.monitor.to_mccode(assembler, at=sample)
-        mon.WHEN('secondary_cassette == -1')
+
 
     def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
         graph.add_node('slits')
