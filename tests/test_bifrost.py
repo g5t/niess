@@ -49,24 +49,28 @@ def test_bifrost_mccode():
     tank = Tank.from_calibration(tank_parameters())
     tank.to_mccode(bifrost, 'sample_origin')
 
-    from mccode_antlr.io.json import load_json
-    from msgspec.structs import fields
-
-    # The loaded-from-state Instr should be equivalent across most niess changes
-    # but may break with changes in mccode-antlr.
-    # It is therefore up to you to decide if a new bifrost_assembler.json should be
-    # minted -- Good luck!
-    instr = load_json(Path(__file__).parent / "bifrost_assembler.json")
-
-    # All members of the instrument should be the same, but registry equivalency
-    # is too strict since the order is not terribly important for a built-instr.
-    for par in fields(instr):
-        if par.name != 'registries':
-            assert getattr(instr, par.name) == getattr(bifrost.instrument, par.name)
+    # The following test is extremely fragile and only useful when making possibly
+    # breaking changes for local testing. The CI does not enforce the McCode version
+    # use for fetched components, so this is very likely to break.
     #
-    # # If the above failed due to upstream changes, you probably want to stash any
-    # # modifications you've made, then come back here, disable the above and enable
-    # # the following:
-    # from mccode_antlr.io.json import save_json
-    # save_json(Path(__file__).parent / "bifrost_assembler.json", bifrost.instrument)
-    # # Then restore your changes and re-enable the checks above.
+    # from mccode_antlr.io.json import load_json
+    # from msgspec.structs import fields
+    #
+    # # The loaded-from-state Instr should be equivalent across most niess changes
+    # # but may break with changes in mccode-antlr.
+    # # It is therefore up to you to decide if a new bifrost_assembler.json should be
+    # # minted -- Good luck!
+    # instr = load_json(Path(__file__).parent / "bifrost_assembler.json")
+    #
+    # # All members of the instrument should be the same, but registry equivalency
+    # # is too strict since the order is not terribly important for a built-instr.
+    # for par in fields(instr):
+    #     if par.name != 'registries':
+    #         assert getattr(instr, par.name) == getattr(bifrost.instrument, par.name)
+    # #
+    # # # If the above failed due to upstream changes, you probably want to stash any
+    # # # modifications you've made, then come back here, disable the above and enable
+    # # # the following:
+    # # from mccode_antlr.io.json import save_json
+    # # save_json(Path(__file__).parent / "bifrost_assembler.json", bifrost.instrument)
+    # # # Then restore your changes and re-enable the checks above.
