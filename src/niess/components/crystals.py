@@ -10,7 +10,7 @@ class IdealCrystal(Base):
     position: Variable
     tau: Variable
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {'position': Variable, 'tau': Variable}
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {'position': Variable, 'tau': Variable}
 
     def triangulate(self, unit=None):
         from scipp import sqrt, dot, vector, arange, concat, cross, isclose
@@ -111,10 +111,10 @@ class Crystal(IdealCrystal):
     orientation: Variable
     mosaic: Variable
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {
-        **{'shape': Variable, 'orientation': Variable, 'mosaic': Variable},
-        **IdealCrystal.__struct_field_types__
-    }
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {
+    #     **{'shape': Variable, 'orientation': Variable, 'mosaic': Variable},
+    #     **IdealCrystal.__struct_field_types__
+    # }
 
     def triangulate(self, unit=None):
         from ..spatial import vector_to_vector_quaternion

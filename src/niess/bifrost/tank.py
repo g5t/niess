@@ -38,7 +38,7 @@ class Tank(Base):
     channels: tuple[Channel, ...]
     monitor: He3Monitor
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {'channels': tuple[Channel, ...], 'monitor': He3Monitor}
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {'channels': tuple[Channel, ...], 'monitor': He3Monitor}
 
     @classmethod
     def from_dict(cls, data):

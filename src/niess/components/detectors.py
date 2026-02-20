@@ -8,11 +8,11 @@ class Wire(Base):
     to: Variable
     resistivity: Variable
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {
-        'at': Variable,
-        'to': Variable,
-        'resistivity': Variable,
-    }
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {
+    #     'at': Variable,
+    #     'to': Variable,
+    #     'resistivity': Variable,
+    # }
 
     def extreme_path_corners(self, horizontal: Variable, vertical: Variable, unit=None):
         from ..spatial import combine_extremes
@@ -85,9 +85,9 @@ class Wire(Base):
 class DiscreteWire(Wire):
     elements: int
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {
-        'elements': int, **Wire.__struct_field_types__
-    }
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {
+    #     'elements': int, **Wire.__struct_field_types__
+    # }
 
     def __eq__(self, other):
         if not isinstance(other, DiscreteWire):
@@ -130,9 +130,9 @@ class DiscreteWire(Wire):
 class DiscreteTube(DiscreteWire):
     radius: Variable
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {
-        'radius': Variable, **DiscreteWire.__struct_field_types__
-    }
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {
+    #     'radius': Variable, **DiscreteWire.__struct_field_types__
+    # }
 
     def __post_init__(self):
         from ..utilities import is_scalar, has_compatible_unit
@@ -195,9 +195,9 @@ class DiscreteTube(DiscreteWire):
 class He3Tube(DiscreteTube):
     pressure: Variable
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {
-        'pressure': Variable, **DiscreteTube.__struct_field_types__
-    }
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {
+    #     'pressure': Variable, **DiscreteTube.__struct_field_types__
+    # }
 
     def __post_init__(self):
         from ..utilities import is_scalar, has_compatible_unit

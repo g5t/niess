@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import msgspec
-from typing import ClassVar, Type
+from msgspec.structs import fields
+from functools import lru_cache
 from scipp import Variable
 from networkx import DiGraph
 from mccode_antlr.assembler import Assembler
@@ -12,28 +13,42 @@ from mccode_antlr.instr import Instance
 #       and should take precedence over 'name' for the purpose of making component graphs
 
 class Base(msgspec.Struct):
-    __struct_field_types__: ClassVar[dict[str, Type]]
+    # __struct_field_types__: ClassVar[dict[str, Type]]
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def fields(cls):
+        return [fi.name for fi in fields(cls)]
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def types(cls):
+        """Get the ordered list of component types which make up this Section"""
+        return [fi.type for fi in fields(cls)]
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def items(cls):
+        """Get the ordered list of component names and types which make up this Section"""
+        return [(n, t) for n, t in zip(cls.fields(), cls.types())]
 
     def to_dict(self):
-        return {k: getattr(self, k) for k in self.__struct_fields__}
+        return {k: getattr(self, k) for k in self.fields()}
 
     @classmethod
     def from_dict(cls, data):
-        for k, t in cls.__struct_field_types__.items():
+        for k, t in cls.items():
             if k not in data:
                 raise KeyError(f"{k} not found in data")
             if not isinstance(data[k], t) and isinstance(data[k], dict) and hasattr(t, 'from_dict'):
                 data[k] = t.from_dict(data[k])
         return cls(**data)
 
-    def fields(self):
-        return self.__struct_fields__
-
     def __eq__(self, other):
         from scipp import identical
         if not isinstance(other, type(self)):
             return False
-        for field in self.__struct_fields__:
+        for field in self.fields():
             a = getattr(self, field)
             b = getattr(other, field)
             if a is None or b is None:

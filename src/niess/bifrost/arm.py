@@ -14,7 +14,7 @@ class Arm(Base):
     analyzer: Analyzer
     detector: Triplet
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {'analyzer': Analyzer, 'detector': Triplet}
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {'analyzer': Analyzer, 'detector': Triplet}
 
     @classmethod
     def from_dict(cls, data):

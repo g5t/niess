@@ -152,7 +152,7 @@ PRIMARY_TYPES = {
 }
 
 class Primary(Section):
-    __struct_field_types__ = PRIMARY_TYPES  # an inconvenient hack
+    # __struct_field_types__ = PRIMARY_TYPES  # an inconvenient hack
 
     source: ESSource
 

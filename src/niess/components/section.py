@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import msgspec
 from networkx import DiGraph
-from typing import ClassVar, Type
+from msgspec.structs import fields
+from functools import lru_cache
 from ..utilities import calibration
 
 # TODO Consider whether it would be possible to use any one of:
@@ -14,26 +15,29 @@ from ..utilities import calibration
 
 # @dataclass
 class Section(msgspec.Struct, tag=True):
-    __struct_field_types__ = ClassVar[dict[str, Type]]
 
     @classmethod
+    @lru_cache(maxsize=None)
     def parts(cls):
         """Get the ordered list of components which make up this Section"""
-        # Note to self, one _could_ hard code this instead if the
-        # dataclasses.fields(cls) trick stops working at some point
-        # but the _order_ of the tuple returned by dataclasses.fields(Type) is
-        # (currently) guaranteed to be the same as the order of definition above
-        return cls.__struct_fields__
+        return [fi.name for fi in fields(cls)]
 
     @classmethod
+    @lru_cache(maxsize=None)
     def types(cls):
         """Get the ordered list of component types which make up this Section"""
-        return [cls.__struct_field_types__[field] for field in cls.__struct_fields__]
+        return [fi.type for fi in fields(cls)]
 
     @classmethod
+    @lru_cache(maxsize=None)
     def items(cls):
         """Get the ordered list of component names and types which make up this Section"""
-        return [(field, cls.__struct_field_types__[field]) for field in cls.__struct_fields__]
+        return [(n, t) for n, t in zip(cls.parts(), cls.types())]
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def field_types(cls):
+        return {fi.name: fi.type for fi in fields(cls)}
 
     def to_mccode(self, *args, **kwargs):
         for part in self.parts():
@@ -51,7 +55,7 @@ class Section(msgspec.Struct, tag=True):
             return parameters[name]
 
         def to_type(name):
-            typ = cls.__struct_field_types__[name]
+            typ = cls.field_types()[name]
             if isinstance(parameters[name], typ):
                 return parameters[name]
             return typ.from_calibration(named_par(name))
@@ -59,7 +63,7 @@ class Section(msgspec.Struct, tag=True):
         return cls(*[to_type(n) for n in cls.parts()])
 
     def to_dict(self):
-        return {f: getattr(self, f) for f in self.__struct_fields__}
+        return {f: getattr(self, f) for f in self.parts()}
 
     @classmethod
     def from_dict(cls, d):

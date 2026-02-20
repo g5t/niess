@@ -19,7 +19,7 @@ class Channel(Base):
 
     pairs: tuple[Arm, Arm, Arm, Arm, Arm]
 
-    __struct_field_types__: ClassVar[dict[str, Type]] = {'pairs': tuple[Arm, Arm, Arm, Arm, Arm]}
+    # __struct_field_types__: ClassVar[dict[str, Type]] = {'pairs': tuple[Arm, Arm, Arm, Arm, Arm]}
 
     @classmethod
     def from_dict(cls, data):
