@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import ClassVar, Type
 from niess.utilities import calibration
 from niess.components import He3Monitor
 from niess.components.component import Base
@@ -37,8 +36,6 @@ class Tank(Base):
 
     channels: tuple[Channel, ...]
     monitor: He3Monitor
-
-    # __struct_field_types__: ClassVar[dict[str, Type]] = {'channels': tuple[Channel, ...], 'monitor': He3Monitor}
 
     @classmethod
     def from_dict(cls, data):

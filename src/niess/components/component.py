@@ -13,7 +13,6 @@ from mccode_antlr.instr import Instance
 #       and should take precedence over 'name' for the purpose of making component graphs
 
 class Base(msgspec.Struct):
-    # __struct_field_types__: ClassVar[dict[str, Type]]
 
     @classmethod
     @lru_cache(maxsize=None)
