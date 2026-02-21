@@ -1,5 +1,4 @@
 from niess.components.component import Base
-from typing import ClassVar, Type
 
 class Analyzer(Base):
     from mccode_antlr.assembler import Assembler
@@ -7,8 +6,6 @@ class Analyzer(Base):
     from scipp import Variable
 
     blades: tuple[Crystal, ...]  # 7-9 blades
-
-    __struct_field_types__: ClassVar[dict[str, Type]] = {'blades': tuple[Crystal, ...]}
 
     @classmethod
     def from_dict(cls, data):

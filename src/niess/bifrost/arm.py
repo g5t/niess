@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from niess.components.component import Base
-from typing import ClassVar, Type
 
 class Arm(Base):
     from networkx import DiGraph
@@ -13,8 +12,6 @@ class Arm(Base):
 
     analyzer: Analyzer
     detector: Triplet
-
-    __struct_field_types__: ClassVar[dict[str, Type]] = {'analyzer': Analyzer, 'detector': Triplet}
 
     @classmethod
     def from_dict(cls, data):

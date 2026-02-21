@@ -13,9 +13,6 @@ class Triplet(Base):
     tubes: tuple[He3Tube, He3Tube, He3Tube]
     resistances: Variable
 
-    __struct_field_types__ = {'tubes': tuple[He3Tube, He3Tube, He3Tube],
-                              'resistances': Variable}
-
     @classmethod
     def from_dict(cls, data):
         from ..components import He3Tube
