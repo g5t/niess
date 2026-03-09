@@ -173,3 +173,24 @@ def calibration(func):
             return func(args[0], calibration_input(*args[1:], **kwargs))
         return func(calibration_input(*args, **kwargs))
     return wrapper
+
+
+def variant_parameters(params: dict, default: dict):
+    """Select the variant parameters for a channel.
+
+    Parameters
+    ----------
+    params : dict
+        over-riding parameters, if present these parameter(s) are returned.
+        These parameters *should not* contain any variant-keyed dictionaries, but
+        no check is performed to prevent this situation.
+
+    default : dict
+        a dictionary with all required variant parameters defined. If a parameter
+        depends on the variant, it must be represented as a variant-keyed dictionary,
+        otherwise the parameter must not be a dictionary.
+    """
+    variant = params.get('variant', default['variant'])
+    complete = {k: params.get(k, v[variant] if isinstance(v, dict) else v) for k, v in
+                default.items()}
+    return complete

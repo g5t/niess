@@ -56,3 +56,27 @@ def ensure_runtime_parameter(a: Assembler, par: InstrumentParameter):
         a.instrument.add_parameter(par)
 
 
+def ensure_registry(a: Assembler, specification: str):
+    """Ensure that a register-defined parameter is declared in the instrument
+
+    Parameters
+    ----------
+    a : Assembler
+    specification : str
+        Any of the mccode_antlr.reader.registry supported formats,
+        1. ``{resolvable folder path}``
+        2. ``{name} {resolvable folder path}``
+        3. ``{name} {resolvable url} {resolvable file path}``
+        4. ``{name} {resolvable url} {version} {registry file name}``
+        5. ``git+{url}@{version}`` or ``git+{url}@{version}#{registry-file}``
+        6. ``{owner}/{repo}@{version}`` or ``{owner}/{repo}@{version}#{registry-file}``
+    """
+    from mccode_antlr.reader.registry import registry_from_specification as rfs
+    reg = rfs(specification)
+    if not reg:
+        msg = f"Unable to construct registry from {specification}"
+        if not 'http' in specification and '/' in specification and not '@' in specification:
+            msg += " missing @{tag|branch|commit} in GitHub Actions style specification"
+        raise RuntimeError(msg)
+    if not reg in a.instrument.registries:
+        a.instrument.registries += (reg,)

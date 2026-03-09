@@ -39,6 +39,18 @@ def known_channel_params():
     known['contact_resistance'] = scalar(88.0/2, unit='Ohm')
     known['resistivity'] = scalar(185., unit='Ohm/in').to(unit='Ohm/m')
 
+    known['beryllium_filter_ncrystal_cfg'] = 'Be_sg194'
+    known['beryllium_filter_temperature'] = scalar(77., unit='K')
+    known['beryllium_filter_inner_radius'] = scalar(510., unit='mm')
+    known['beryllium_filter_outer_radius'] = scalar(720., unit='mm')
+    known['beryllium_filter_height'] = scalar(57.0, unit='mm')
+    known['beryllium_filter_width'] = scalar(7.8, unit='deg')
+    known['radial_collimator_inner_radius'] = scalar(500., unit='mm')
+    known['radial_collimator_outer_radius'] = scalar(820., unit='mm')
+    known['radial_collimator_height'] = scalar(65., unit='mm')
+    known['radial_collimator_collimation'] = scalar(0.65, unit='deg')
+    known['radial_collimator_width'] = scalar(7.8, unit='deg')
+
     return known
 
 def tank_parameters():

@@ -52,6 +52,9 @@ class FrameMonitor(Component):
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
     ):
+        from niess.mccode import ensure_registry
+        ensure_registry(assembler, 'mcdotstar/mcstas-frame-tof-monitor@main')
+
         inst = super().to_mccode(assembler, at, rotate)
         # Build the NeXus Structure entry to point to the correct Kafka stream
         return add_monitor_metadata(assembler.name, inst, self.time_bins())

@@ -73,22 +73,11 @@ an `Assembler` from the `mccode_antlr` package.
 ```python
 from mccode_antlr import Flavor
 from mccode_antlr.assembler import Assembler
-from mccode_antlr.reader import GitHubRegistry
 from niess.bifrost.parameters import primary_parameters, tank_parameters
 from niess.bifrost import Primary, Tank
 
-registries = ['mcstas-chopper-lib', 'mcstas-transformer', 'mcstas-detector-tubes',
-              'mcstas-epics-link', 'mcstas-frame-tof-monitor', 'mccode-mcpl-filter',
-              'mcstas-monochromator-rowland', 'mcstas-slit-radial']
-registries = [GitHubRegistry(
-    name,
-    url=f'https://github.com/mcdotstar/{name}',
-    filename='pooch-registry.txt',
-    version='main'
-) for name in registries]
 
-
-assembler = Assembler('bifrost', registries=registries, flavor=Flavor.MCSTAS)
+assembler = Assembler('bifrost', flavor=Flavor.MCSTAS)
 Primary.from_calibration(primary_parameters()).to_mccode(assembler)
 Tank.from_calibration(tank_parameters()).to_mccode(assembler, 'sample_coordinates')
 
