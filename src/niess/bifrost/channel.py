@@ -17,7 +17,7 @@ class Channel(Base):
     @classmethod
     def from_dict(cls, data):
         from .arm import Arm
-        radial_filter_collimator = data['filter']
+        radial_filter_collimator = data['radial_filter_collimator']
         if isinstance(radial_filter_collimator, dict):
             radial_filter_collimator = RadialFilterCollimator.from_dict(radial_filter_collimator)
         pairs = data['pairs']
