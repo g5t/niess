@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 from niess.components.component import Base
-
-def variant_parameters(params: dict, default: dict):
-    variant = params.get('variant', default['variant'])
-    complete = {k: params.get(k, v[variant] if isinstance(v, dict) else v) for k, v in default.items()}
-    return complete
-
+from niess.components import RadialFilterCollimator
 
 
 class Channel(Base):
@@ -16,31 +11,61 @@ class Channel(Base):
     from scipp import Variable
     from .arm import Arm
 
+    radial_filter_collimator: RadialFilterCollimator
     pairs: tuple[Arm, Arm, Arm, Arm, Arm]
 
     @classmethod
     def from_dict(cls, data):
         from .arm import Arm
+        radial_filter_collimator = data['radial_filter_collimator']
+        if isinstance(radial_filter_collimator, dict):
+            radial_filter_collimator = RadialFilterCollimator.from_dict(radial_filter_collimator)
         pairs = data['pairs']
         if not hasattr(pairs, '__len__') or len(pairs) != 5:
             raise ValueError(f'Blades must have 5 elements (not {len(pairs)})')
         pairs = tuple(p if isinstance(p, Arm) else Arm.from_dict(p) for p in pairs)
-        return cls(pairs)
+        return cls(radial_filter_collimator, (pairs[0], pairs[1], pairs[2], pairs[3], pairs[4]))
 
     @staticmethod
     def from_calibration(relative_angle: Variable, **params):
         from math import pi
-        from scipp import sqrt, tan, atan, asin, min, vector
+        from scipp import sqrt, tan, atan, asin, min, vector, scalar, Variable
         from scipp.constants import hbar, neutron_mass
         from scipp.spatial import rotations_from_rotvecs
         from .parameters import known_channel_params, tube_xz_displacement_to_quaternion
         from .arm import Arm
+        from niess.utilities import variant_parameters
 
         vp = variant_parameters(params, known_channel_params())
 
         tau = params.get('tau', 2 * pi / vp['d_spacing'])
 
         sample = vp['sample']
+
+        rfc_height = params.get(
+            'beryllium_filter_height',
+            params.get('radial_collimator_height', scalar(80., unit='mm'))
+        )
+        rfc_width = params.get(
+            'beryllium_filter_width',
+            params.get('radial_collimator_width', scalar(180., unit='deg'))
+        )
+        rfc_params: dict[str, str | Variable] = {
+            'name': 'radial_filter_collimator',
+            'height': rfc_height,
+            'filter_inner_radius': params.get('beryllium_filter_inner_radius', scalar(0., unit='mm')),
+            'filter_outer_radius': params.get('beryllium_filter_outer_radius', scalar(0., unit='mm')),
+            'collimator_inner_radius': params.get('radial_collimator_inner_radius', scalar(0., unit='mm')),
+            'collimator_outer_radius': params.get('radial_collimator_outer_radius', scalar(0., unit='mm')),
+            'angle_width': rfc_width,
+            'collimation': params.get('radial_collimator_collimation', rfc_width),
+            'composition': params.get('beryllium_filter_ncrystal_cfg', 'Be_sg194'),
+            'temperature': params.get('beryllium_filter_temperature', scalar(0., unit='K')),
+            # positioned relative to the sample, at (0, 0, 0)
+            # rotated relative the sample-analyzer-vector, (0, 0, 0) degrees
+        }
+
+        rfc = RadialFilterCollimator.from_calibration(rfc_params)
 
         analyzer_vector = vector([1, 0, 0]) * vp['sample_analyzer_distance']
 
@@ -107,7 +132,7 @@ class Channel(Base):
             )
             pairs.append(Arm.from_calibration(ap, tv, detector_position['analyzer', idx], dl, **params))
 
-        return Channel((pairs[0], pairs[1], pairs[2], pairs[3], pairs[4]))
+        return Channel(rfc, (pairs[0], pairs[1], pairs[2], pairs[3], pairs[4]))
 
     def triangulate_detectors(self, unit=None):
         from ..spatial import combine_triangulations
@@ -161,6 +186,11 @@ class Channel(Base):
 
         for uv in ('int secondary_scattered;', 'int analyzer;', 'int flag;'):
             assembler.ensure_user_var(uv)
+
+        # The filter name does not, thus far, include the channel name:
+        self.radial_filter_collimator.name = f'{name}_radial_filter_collimator'
+        rfc = self.radial_filter_collimator.to_mccode(assembler, cassette, cassette)
+        rfc.WHEN(when)
 
         for arm_index, arm in enumerate(self.pairs):
             arm_name = f"{name}_{1 + arm_index}"

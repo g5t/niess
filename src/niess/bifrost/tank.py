@@ -52,17 +52,39 @@ class Tank(Base):
     @staticmethod
     @calibration
     def from_calibration(cal: dict):
-        from scipp import array
+        """Construct a Tank from a calibration dictionary.
+
+        Parameters
+        ----------
+        cal: dict
+            If empty, or if no `'channels'` entry is present, the values provided by
+            `py::module::niess.bifrost.parameters::known_channel_params` are used.
+            If 'channels' is present, it should contain a dictionary with per-channel
+            parameters stored under a key 'channel_params', which is an integer keyed
+            dictionary of variant-free parameters. The length of the channel_params
+            dictionary should match the length of cal['channels']['angles'], a
+            float-valued 1-D scipp.array of the channel angle relative to the tank
+            centerline, defaulting to 9-channels at -40:10:40 degrees (inclusive)
+
+        """
+        from scipp import arange, linspace
         from .channel import Channel
         from .parameters import known_channel_params
+        from niess.utilities import variant_parameters
         params = cal.get('channels', known_channel_params())
-        channel_params = [{'variant': x} for x in ('s', 'm', 'l')]
-        channel_params = {i: channel_params[i % 3] for i in range(9)}
-        # but this can be overridden by specifying an integer-keyed dictionary with the parameters for each channel
-        channel_params = params.get('channel_params', channel_params)
+        variants = [{'variant': x} for x in ('s', 'm', 'l')]
         # The central a4 angle for each channel, relative to the reference tank angle
-        angles = params.get('angles',
-                            array(values=[-40, -30, -20, -10, 0, 10, 20, 30, 40.], unit='degree', dims=['channel']))
+        angles = linspace('channel', -40, 40, 9, unit='degree', dtype='float')
+        angles = params.get('angles', angles)
+        # Assume the channel variants cycle through ('s', 'm', 'l') as in reality
+        channel_params = {i: variants[i % 3] for i in range(angles.size)}
+        # but this can be overridden by specifying an integer-keyed dictionary
+        # with the parameters for each channel (and .pop removes it from params if present)
+        channel_params = params.pop('channel_params', channel_params)
+
+        # Which we might need to update with per-variant/constant parameters
+        for val in channel_params.values():
+            val.update(variant_parameters(val, params))
 
         channels = [Channel.from_calibration(angles[i], **channel_params[i]) for i in range(9)]
         return Tank(tuple(channels), _elastic_monitor_from_params(cal))
@@ -133,9 +155,19 @@ class Tank(Base):
         from scipp import concat
         return [concat(q, dim='channel') for q in zip(*[c.rtp_parameters(sample) for c in self.channels])]
 
-    def to_mccode(self, assembler: Assembler, sample: Instance, settings: dict = None, **kwargs):
+    def to_mccode(
+            self,
+            assembler: Assembler,
+            sample: Instance,
+            tank_bragg_monitor_group: str | None = None,
+            tank_when: str | None = None,
+            bragg_monitor_when: str | None =  None,
+            settings: dict | None = None,
+            **kwargs
+    ):
         from scipp import vector, concat, max
-        from ..mccode import ensure_user_var
+        from ..mccode import ensure_user_var, ensure_registry
+        ensure_registry(assembler, "mcdotstar/mcstas-slit-radial@main") # for slits
         ensure_user_var(assembler, 'int', 'secondary_cassette', 'Secondary spectrometer analyzer cassette index')
 
         origin = vector([0, 0, 0], unit='m')
@@ -153,12 +185,21 @@ class Tank(Base):
         # `slit` is 0-8 iff scattered.
         # This could be `secondary_cassette = 1 + slit;` unambiguously
         slits.EXTEND("secondary_cassette = (SCATTERED) ? 1 + slit : -1;")
-        # We must use a group with the monitor to avoid absorbing rays which could hit
-        # there
-        slits.GROUP('slits_and_monitor')
 
+        # Insert the Bragg Peak elastic monitor
         mon = self.monitor.to_mccode(assembler, at=sample)
-        mon.GROUP('slits_and_monitor')
+
+        if tank_bragg_monitor_group is not None:
+            # One way to allow scattering from one sample to both elastic and inelastic
+            # detectors.
+            slits.GROUP(tank_bragg_monitor_group)
+            mon.GROUP(tank_bragg_monitor_group)
+        else:
+            if bragg_monitor_when is not None:
+                mon.WHEN(bragg_monitor_when)
+            if tank_when is not None:
+                slits.WHEN(tank_when)
+
 
         for index, channel in enumerate(self.channels):
             name = f"channel_{1 + index}"

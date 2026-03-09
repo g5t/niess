@@ -5,7 +5,10 @@ from .aperture import Aperture, Jaw, Slit
 from .chopper import Chopper, DiscChopper, FermiChopper
 from .collimator import Collimator, SollerCollimator, RadialCollimator
 from .component import Component
-from .filter import Attenuator, Filter, OrderedFilter, make_aluminum
+from .filter import (
+    Attenuator, Filter, NCrystalFilter, OrderedFilter, RadialFilterCollimator,
+    make_aluminum
+)
 from .guide import EllipticGuide, TaperedGuide, StraightGuide, Guide, StraightGuides, TaperedGuides
 from .moderator import Moderator
 from .monitors import FissionChamber, He3Monitor, BeamCurrentMonitor, GEM2D
@@ -33,7 +36,9 @@ __all__ = [
     Component,
     Attenuator,
     Filter,
+    NCrystalFilter,
     OrderedFilter,
+    RadialFilterCollimator,
     make_aluminum,
     Guide,
     EllipticGuide,

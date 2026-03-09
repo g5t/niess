@@ -151,8 +151,12 @@ class Triplet(Base):
     def to_mccode(self, assembler: Assembler, relative: str, distance: float, name: str,
                   when: str = None, extend: str = None, add_metadata: bool = False,
                   component: str = None, parameters: dict = None):
+        from niess.mccode import ensure_registry
         if component is None:
             component = 'Detector_tubes'
+        if component in ('Detector_tubes', 'Detector_time_tubes'):
+            ensure_registry(assembler, 'mcdotstar/mcstas-detector-tubes@main')
+
         base_parameters = self.mcstas_parameters()
         if parameters is not None:
             base_parameters.update(parameters)

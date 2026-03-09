@@ -7,7 +7,7 @@ name = "niess"
 dynamic = ["version"]
 description = ''
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "BSD-3-Clause"
 keywords = []
 authors = [
@@ -32,6 +32,9 @@ dependencies = [
   "networkx>=3.6",
   "ncrystal>=4.2.4" # required for B4C_sg166_BoronCarbide
 ]
+
+[project.optional-dependencies]
+test = ['pytest']
 
 [project.urls]
 Documentation = "https://github.com/g5t/niess#readme"
