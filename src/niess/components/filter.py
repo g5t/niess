@@ -105,12 +105,11 @@ class Attenuator(NCrystalFilter):
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
     ):
-        from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType, ObjectType, ShapeType
+        from mccode_antlr.common import InstrumentParameter, Expr
         parameter = InstrumentParameter.parse(f"int {self.name}_in = 0")
         assembler.instrument.add_parameter(parameter, ignore_repeated=True)
         comp = super().to_mccode(assembler, at, rotate)
-        var = Value(parameter.name, DataType.int, ObjectType.parameter, ShapeType.scalar)
-        comp.WHEN(Expr(var))
+        comp.WHEN(Expr.parameter(parameter.name))
         return comp
 
 

@@ -4,23 +4,6 @@
 from operator import getitem
 
 
-def get_mccode_registries():
-    from mccode_antlr.reader import GitHubRegistry
-
-    registries = ['mcstas-chopper-lib', 'mcstas-transformer', 'mcstas-detector-tubes',
-                  'mcstas-epics-link', 'mcstas-frame-tof-monitor', 'mccode-mcpl-filter',
-                  'mcstas-monochromator-rowland', 'mcstas-slit-radial']
-    registries = [GitHubRegistry(
-        name,
-        url=f'https://github.com/mcdotstar/{name}',
-        filename='pooch-registry.txt',
-        version='main'
-    ) for name in registries]
-
-    return registries
-
-
-
 def test_bifrost_whole():
     from niess.bifrost.parameters import primary_parameters, tank_parameters
     from niess.bifrost import Tank, Primary
@@ -36,7 +19,7 @@ def test_bifrost_mccode():
     from mccode_antlr.assembler import Assembler
     from pathlib import Path
 
-    bifrost = Assembler('bifrost', registries=get_mccode_registries(), flavor=Flavor.MCSTAS)
+    bifrost = Assembler('bifrost', flavor=Flavor.MCSTAS)
 
     primary = Primary.from_calibration(primary_parameters())
     primary.to_mccode(bifrost)
