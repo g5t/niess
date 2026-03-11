@@ -202,8 +202,9 @@ class Channel(Base):
                           settings=settings, detector_when=detector_when, detector_extend=detector_extend, **kwargs)
 
     def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
-        cassette = f'{name}_arm'
-        graph.add_node(cassette)
+        radial_collimator_filter = f'{name}_radial_filter_collimator'
         if upstream is not None:
-            graph.add_edge(upstream, cassette)
+            graph.add_edge(upstream, radial_collimator_filter)
+        cassette = f'{name}_arm'
+        graph.add_edge(radial_collimator_filter, cassette)
         return [arm.add_to_graph(cassette, f"{name}_{1 + arm_index}", graph) for arm_index, arm in enumerate(self.pairs)]
