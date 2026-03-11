@@ -205,7 +205,6 @@ class Channel(Base):
         radial_collimator_filter = f'{name}_radial_filter_collimator'
         if upstream is not None:
             graph.add_edge(upstream, radial_collimator_filter)
-        # cassette = f'{name}_arm'
-        # graph.add_edge(radial_collimator_filter, cassette)
-        # # Previously this put all analyzers downstream of a common "cassette" node
-        return [arm.add_to_graph(radial_collimator_filter, f"{name}_{1 + arm_index}", graph) for arm_index, arm in enumerate(self.pairs)]
+        cassette = f'{name}_arm'
+        graph.add_edge(radial_collimator_filter, cassette)
+        return [arm.add_to_graph(cassette, f"{name}_{1 + arm_index}", graph) for arm_index, arm in enumerate(self.pairs)]
