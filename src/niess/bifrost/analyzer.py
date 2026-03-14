@@ -109,7 +109,8 @@ class Analyzer(Base):
             show_construction='showconstruction',
             angle_h=ver_cov.to(unit='degree').value,
             source=f'"{source}"',
-            sink=f'"{sink}"'
+            sink=f'"{sink}"',
+            focush='"exact"',
         )
         return params
 
