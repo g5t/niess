@@ -109,11 +109,12 @@ class ESSource(Source):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
+            insert_brep_metadata: bool = False,
     ):
         from ..mccode import ensure_runtime_parameter
         for field in self.fields():
             p = getattr(self, field)
             if isinstance(p, InstrumentParameter):
                 ensure_runtime_parameter(assembler, p)
-        return super().to_mccode(assembler, at, rotate)
+        return super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
 
