@@ -11,14 +11,18 @@ from .components import (
     DiscreteTube,
     He3Tube
 )
+from .brep import NiessBRepRegistry, instrument_to_assembly, save_step
 
 __all__ = [
-DirectSecondary,
+    DirectSecondary,
     IndirectSecondary,
     IdealCrystal,
     Crystal,
     Wire,
     DiscreteWire,
     DiscreteTube,
-    He3Tube
+    He3Tube,
+    NiessBRepRegistry,
+    instrument_to_assembly,
+    save_step,
 ]

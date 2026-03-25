@@ -82,3 +82,38 @@ Primary.from_calibration(primary_parameters()).to_mccode(assembler)
 Tank.from_calibration(tank_parameters()).to_mccode(assembler, 'sample_coordinates')
 
 ```
+
+## Optional CAD information
+
+When a `niess` object is exported to `mccode_antlr`, the emitted component instances
+can also receive niess-specific `METADATA` describing their originating niess type. This
+can be used to build a more faithful CAD representation than the default `MCDISPLAY`
+fallback:
+
+```python
+from scipp import vector, scalar
+from scipp.spatial import rotations_from_rotvecs
+from mccode_antlr import Flavor
+from mccode_antlr.assembler import Assembler
+from niess.components import Guide
+from niess.mccode import add_niess_metadata
+from niess.brep import instrument_to_assembly, save_step
+
+assembler = Assembler('instrument', flavor=Flavor.MCSTAS)
+
+width, height, substrate_thickness = 0.1, 0.2, 0.005  # m
+guide = Guide(
+    name="guide", 
+    position=vector([0, 0, 0], unit='m'), 
+    orientation=rotations_from_rotvecs(vector([0, 0, 0], unit='degree')),
+    length=scalar(1., unit='m'),
+    left=1.,  right=1., top=1., bottom=1. # m-values are unitless
+)
+instance = guide.to_mccode(assembler, insert_brep_metadata=True)
+# Override the standard extra information to include the guide substrate thickness,
+# which is not represented in McStas but can be drawn in CAD software
+add_niess_metadata(instance, guide, extra={'substrate': substrate_thickness})
+
+assembly = instrument_to_assembly(assembler.instrument)
+save_step(assembly, 'bifrost.step')
+```

@@ -334,9 +334,10 @@ class EllipticGuide(Guide):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
+            insert_brep_metadata: bool = False,
     ):
         if isinstance(self.left, tuple):
             assembler.declare_array('double', f'{self.name}_lens', self.length.to(unit='m').values)
             for n in ('left', 'right', 'top', 'bottom'):
                 assembler.declare_array('double', f'{self.name}_{n}', getattr(self, n))
-        super().to_mccode(assembler, at, rotate)
+        return super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
