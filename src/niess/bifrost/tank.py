@@ -159,13 +159,10 @@ class Tank(Base):
             self,
             assembler: Assembler,
             sample: Instance,
-            tank_bragg_monitor_group: str | None = None,
-            tank_when: str | None = None,
-            bragg_monitor_when: str | None =  None,
             settings: dict | None = None,
             **kwargs
     ):
-        from scipp import vector, concat, max
+        from scipp import vector, concat, max, atan2
         from ..mccode import ensure_user_var, ensure_registry
         ensure_registry(assembler, "mcdotstar/mcstas-slit-radial@main") # for slits
         ensure_user_var(assembler, 'int', 'secondary_cassette', 'Secondary spectrometer analyzer cassette index')
@@ -175,31 +172,25 @@ class Tank(Base):
         cov_xy = [c.coverage(origin, unit='radian') for c in self.channels]
         cov_x = 2 * max(concat([y for _, y in cov_xy], dim='channel')).value
 
+        # Add the elastic (Bragg peak) monitor to the slits:
+        mon_at = self.monitor.position - origin.to(unit=self.monitor.position.unit)
+        positions.append(atan2(y=mon_at.fields.x, x=mon_at.fields.z).to(unit='radian').value)
+
         slits_name = 'slits'
         declared_positions = f'{slits_name}_positions'
         assembler.declare_array('double', declared_positions, positions, source=__file__, line=173)
         slits = assembler.component(slits_name, 'Slit_radial_multi', at=((0, 0, 0,), sample))
         slits.set_parameters(slit_width=cov_x, offset='slitAngle*DEG2RAD',
-                             number=len(self.channels), radius='slitDistance', height=0.2,
+                             number=len(positions), radius='slitDistance', height=0.2,
                              positions=declared_positions)
-        # `slit` is 0-8 iff scattered.
+        # `slit` is >=0 iff scattered.
         # This could be `secondary_cassette = 1 + slit;` unambiguously
         slits.EXTEND("secondary_cassette = (SCATTERED) ? 1 + slit : -1;")
 
-        # Insert the Bragg Peak elastic monitor
+        # Insert the Bragg Peak elastic monitor -- it is outside the slits
         mon = self.monitor.to_mccode(assembler, at=sample)
-
-        if tank_bragg_monitor_group is not None:
-            # One way to allow scattering from one sample to both elastic and inelastic
-            # detectors.
-            slits.GROUP(tank_bragg_monitor_group)
-            mon.GROUP(tank_bragg_monitor_group)
-        else:
-            if bragg_monitor_when is not None:
-                mon.WHEN(bragg_monitor_when)
-            if tank_when is not None:
-                slits.WHEN(tank_when)
-
+        # The slit for this monitor was added last, so it _is_ the last one
+        mon.WHEN(f"secondary_cassette == {len(positions)}")
 
         for index, channel in enumerate(self.channels):
             name = f"channel_{1 + index}"
