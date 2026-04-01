@@ -83,7 +83,22 @@ class NCrystalFilter(Filter):
         params['yheight'] = self.height.to(unit='m').value
         params['zdepth'] = self.length.to(unit='m').value
         params['cfg'] = self.cfg
-        return 'NCrystal_sample', params
+        # TODO: Consider also setting (wavelength|energy|wavenumber) limits for
+        #       INITIALIZE calculated transmission data -- Filter_sample uses
+        #       wavelength and 'sensible' defaults without any specified.
+        return 'Filter_sample', params
+
+    def to_mccode(
+            self, assembler: Assembler,
+            at: Instance | str | None = None, rotate: Instance | str | None = None,
+            insert_brep_metadata: bool = False,
+    ):
+        """Overload to ensure the registry we need is present"""
+        from niess.mccode import ensure_registry
+        ensure_registry(assembler, 'mcdotstar/mcstas-radial-filter-collimator@main')
+        comp = super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        return comp
+
 
 
 class OrderedFilter(NCrystalFilter):
@@ -173,7 +188,10 @@ class RadialFilterCollimator(Filter):
             "collimation": self.collimation_angle.to(unit='deg').value,
             "cfg": self.cfg,
         }
-        return 'Radial_filter_collimator', params
+        # TODO: Consider also setting (wavelength|energy|wavenumber) limits for
+        #       INITIALIZE calculated transmission data -- Radial_col_filter uses
+        #       wavelength and 'sensible' defaults without any specified.
+        return 'Radial_col_filter', params
 
     def to_mccode(
             self, assembler: Assembler,
