@@ -92,3 +92,39 @@ def test_bifrost_tank_angles():
     # verify that the limits increase monotonically
     changes = flat[1:] - flat[:-1]
     assert all(c > scalar(0, unit='deg') for c in changes)
+
+
+def test_bifrost_efu_parameters():
+    from datetime import datetime
+    from niess.bifrost import Tank
+    from niess.bifrost.parameters import tank_parameters
+    params = tank_parameters()
+    tank = Tank.from_calibration(params)
+    assert len(tank.channels) == 9
+    after = datetime.now()
+    efu_params = tank.efu_calibration()
+    before = datetime.now()
+    assert len(efu_params) == 1 and 'Calibration' in efu_params
+    calibration = efu_params['Calibration']
+    assert 'version' in calibration and calibration['version'] == 0
+    assert 'instrument' in calibration and calibration['instrument'] == 'bifrost'
+    assert 'date' in calibration
+    date = datetime.fromisoformat(calibration['date'])
+    assert after <= date <= before
+    assert 'groups' in calibration and calibration['groups'] == 45
+    assert 'groupsize' in calibration and calibration['groupsize'] == 3
+    assert 'Parameters' in calibration
+    params = calibration['Parameters']
+    assert len(params) == 45
+    for index, param in enumerate(params):
+        assert 'groupindex' in param and param['groupindex'] == index
+        assert 'intervals' in param and len(param['intervals']) == 3
+        s = set()
+        for interval in param['intervals']:
+            assert len(interval) == 2
+            assert all(0 <= x <= 1 for x in interval)
+            s = s.union(interval)
+        assert len(s) == 6
+        assert 'polynomials' in param and len(param['polynomials']) == 3
+        for polynomial in param['polynomials']:
+            assert len(polynomial) == 4
