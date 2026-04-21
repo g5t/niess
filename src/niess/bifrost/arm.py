@@ -172,3 +172,5 @@ class Arm(Base):
 
         return [triplet]
 
+    def efu_calibration(self, group: int = -1):
+        return self.detector.efu_calibration(group=group)

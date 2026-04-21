@@ -1,4 +1,34 @@
+from dataclasses import dataclass
+from tokenize import group
+
 from niess.components.component import Base
+
+@dataclass
+class EFUTripletConfig:
+    group: int
+    x0: float
+    x1: float
+    x2: float
+    x3: float
+    x4: float
+    x5: float
+
+    def limits(self):
+        return (self.x0, self.x1), (self.x2, self.x3), (self.x4, self.x5)
+
+    @staticmethod
+    def coefficients():
+        return (0., 0., 0., 0.), (0., 0., 0., 0.), (0., 0., 0., 0.)
+
+    def to_dict(self):
+        # Entries named to match EFU configuration version 0
+        return {
+            'groupindex': self.group,
+            'intervals': self.limits(),
+            'polynomials': self.coefficients()
+        }
+
+
 
 def __is_type__(x, t, name):
     if not isinstance(x, t):
@@ -172,3 +202,23 @@ class Triplet(Base):
         tubes = assembler.component(name, component, at=((0, 0, distance), relative), parameters=base_parameters)
         tubes.WHEN(when)
         tubes.EXTEND(extend)
+
+    def efu_calibration(self, group: int = -1) -> EFUTripletConfig:
+        # The charge division space is subdivided by the Event Formation Unit into
+        # individual pixels, but this subdivision is not monotonic nor continuous.
+        # For each tube in the triplet the EFU requires the ordered low- and high-a4
+        # edge pair of the active tube length. Additionally, the coefficients of an
+        # order-4 polynomial that correct the charge division space between these limits
+        # to be linear in _length_ along the tube axis are needed.
+        # From the resistance and resistivity data stored in this object, we can
+        # calculate the expected values needed for the EFU calibration:
+        r_xs = self.a_over_a_plus_b_edges() # [0., R_a/R_tot, (R_a+rho_0*l_0)/R_tot, ...]
+        x = r_xs.values
+        # The deposited charge is divided by how much resistance is present in the
+        # two readout directions, with the lower-resistance path receiving more charge.
+        # So the resistance based edges are opposite the needed charge division edges.
+        # Plus the outer and center tubes are oriented in opposite directions
+        x0, x1 = 1 - x[1], 1 - x[2]  # x0 > x1
+        x2, x3 = 1 - x[4], 1 - x[3]  # x2 < x3
+        x4, x5 = 1 - x[5], 1 - x[6]  # x4 > x5
+        return EFUTripletConfig(group, x0, x1, x2, x3, x4, x5)

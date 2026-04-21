@@ -208,3 +208,12 @@ class Channel(Base):
         cassette = f'{name}_arm'
         graph.add_edge(radial_collimator_filter, cassette)
         return [arm.add_to_graph(cassette, f"{name}_{1 + arm_index}", graph) for arm_index, arm in enumerate(self.pairs)]
+
+    def efu_calibration(self, channel_number: int):
+        """The EFU calibration needs a unique 'group' number for each triplet
+        The current understanding is that `arc = group // 9` and `triplet = group % 9`
+        This means that `group = 9 * arc + triplet` where `0 <= arc < 5` is an
+        enumeration of the analyzer energies from low to high, and `0 <= triplet < 9`
+        is an enumeration of the equal-energy analyzers from low to high scattering angle
+        """
+        return [arm.efu_calibration(9 * index + channel_number) for index, arm in enumerate(self.pairs)]

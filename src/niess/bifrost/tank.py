@@ -197,8 +197,6 @@ class Tank(Base):
             when = f"{1 + index} == secondary_cassette"
             channel.to_mccode(assembler, sample, name=name, when=when, settings=settings, **kwargs)
 
-
-
     def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
         graph.add_node('slits')
         if upstream is not None:
@@ -206,3 +204,20 @@ class Tank(Base):
         cs = [channel.add_to_graph('slits', f"channel_{1 + index}", graph) for index, channel in enumerate(self.channels)]
         mn = self.monitor.add_to_graph(upstream, self.monitor.name, graph)
         return [*cs, mn]
+
+    def efu_calibration(self):
+        """Build the serializable representation of the EFU calibration data needed
+        to correctly pixelate data produced by the triplets given their current
+        calibrated resistances and resistivities"""
+        import datetime
+        cals = [x for z in [c.efu_calibration(i) for i, c in enumerate(self.channels)] for x in z]
+        payload = {
+            'version': 0,
+            'date': datetime.datetime.now().isoformat(),
+            'info': "Produced for BIFROST by niess",
+            'instrument': 'bifrost',
+            'groups': len(cals),
+            'groupsize': 3,
+            'Parameters': [c.to_dict() for c in sorted(cals, key=lambda x: x.group)]
+        }
+        return {'Calibration': payload}
