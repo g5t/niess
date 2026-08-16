@@ -176,7 +176,7 @@ class Channel(Base):
 
         return sa, ad, x7, y7, a7, x9, y9, a9, ra0
 
-    def to_mccode(self, assembler: Assembler, relative: Instance, name: str, when: str = None, settings: dict = None, **kwargs):
+    def to_mccode(self, assembler: Assembler, relative: Instance, name: str, when: str = None, settings: dict = None, flat: bool=True, **kwargs):
         from scipp import concat, all, isclose, vector
         # For each channel we need to define the local coordinate system, relative to the provided sample
         origin = vector([0, 0, 0], unit='m')
@@ -198,8 +198,15 @@ class Channel(Base):
             extend = f"secondary_scattered = (SCATTERED) ? 1 : 0;\nanalyzer = (SCATTERED) ? {1 + arm_index} : 0;"
             detector_when = f"{when} && {1 + arm_index}==analyzer"
             detector_extend = f"flag = (SCATTERED) ? 1 : 0;"
-            arm.to_mccode(assembler, cassette, name=arm_name, analyzer_when=arm_when, analyzer_extend=extend,
-                          settings=settings, detector_when=detector_when, detector_extend=detector_extend, **kwargs)
+            to_mc = dict(
+                name=arm_name, settings=settings,
+                analyzer_when=arm_when, analyzer_extend=extend,
+                detector_when=detector_when, detector_extend=detector_extend)
+            if flat:
+                arm.to_mccode(assembler, cassette, **to_mc, **kwargs)
+            else:
+                with assembler.included(f"{assembler.name}_{arm_name}") as child:
+                    arm.to_mccode(child, cassette, **to_mc, **kwargs)
 
     def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
         radial_collimator_filter = f'{name}_radial_filter_collimator'
