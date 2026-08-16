@@ -5,22 +5,18 @@ import msgspec
 from networkx import DiGraph
 from msgspec.structs import fields
 from functools import lru_cache
+from mccode_antlr.assembler import Assembler
 from ..utilities import calibration
 
-# TODO Consider whether it would be possible to use any one of:
-#      datclass-wizzard: https://dataclass-wizard.readthedocs.io
-#      pydantic: https://docs.pydantic.dev
-#      dacite: https://github.com/konradhalas/dacite
-#      to handle (de)serializing these nested dataclass objects from calibration data.
 
-# @dataclass
 class Section(msgspec.Struct, tag=True):
 
     @classmethod
     @lru_cache(maxsize=None)
     def parts(cls):
         """Get the ordered list of components which make up this Section"""
-        return [fi.name for fi in fields(cls)]
+        # Exclude names which start with underscores
+        return [fi.name for fi in fields(cls) if not fi.name.startswith('_')]
 
     @classmethod
     @lru_cache(maxsize=None)
@@ -39,15 +35,34 @@ class Section(msgspec.Struct, tag=True):
     def field_types(cls):
         return {fi.name: fi.type for fi in fields(cls)}
 
-    def to_mccode(self, *args, **kwargs):
+    def to_mccode_flat(self, assembler: Assembler, *args, **kwargs):
+        """
+        Add this section of components directly into the provided assembler's Instr.
+        """
         for part in self.parts():
-            getattr(self, part).to_mccode(*args, **kwargs)
+            getattr(self, part).to_mccode(assembler, *args, **kwargs)
+
+    def to_mccode_nested(self, assembler: Assembler, *args, **kwargs):
+        """
+        Convert this section of components into a McStas Instr via a provided assembler.
+        Inserting it into the Instr hierarchy as if an %included separate .instr file.
+        """
+        import re
+        name = re.sub('([A-Z]+)', r'_\1', type(self).__name__).lower()
+        with assembler.included(f"{assembler.name}{name}") as section:
+            self.to_mccode_flat(section, *args, **kwargs)
+
+    def to_mccode(self, *args, **kwargs):
+        if hasattr(self, '_flat') and getattr(self, '_flat', False):
+            self.to_mccode_flat(*args, **kwargs)
+        else:
+            self.to_mccode_nested(*args, **kwargs)
 
     @classmethod
     @calibration
     def from_calibration(cls, parameters: dict):
         for part in cls.parts():
-            assert part in parameters
+            assert part in parameters, f"{part} is not present in the parameters"
 
         def named_par(name):
             if 'name' not in parameters[name]:

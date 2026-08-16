@@ -160,6 +160,7 @@ class Tank(Base):
             assembler: Assembler,
             sample: Instance,
             settings: dict | None = None,
+            flat: bool = True,
             **kwargs
     ):
         from scipp import vector, concat, max, atan2
@@ -195,7 +196,7 @@ class Tank(Base):
         for index, channel in enumerate(self.channels):
             name = f"channel_{1 + index}"
             when = f"{1 + index} == secondary_cassette"
-            channel.to_mccode(assembler, sample, name=name, when=when, settings=settings, **kwargs)
+            channel.to_mccode(assembler, sample, name=name, when=when, settings=settings, flat=flat, **kwargs)
 
     def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
         graph.add_node('slits')

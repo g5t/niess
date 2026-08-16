@@ -28,9 +28,14 @@ def test_bifrost_mccode():
     #      e.g., the split_at location at the end of the guide
     #      any filters, e.g., a hits-the-sample MCPL filter, or a Be-transmission filter
     #      the radial collimator between sample and tank, etc.
+    bifrost.component('sample', 'Arm', at=([0,0,0], 'sample_origin'))
 
     tank = Tank.from_calibration(tank_parameters())
-    tank.to_mccode(bifrost, 'sample_origin')
+    with bifrost.included('bifrost_tank') as tank_assembler:
+        tank.to_mccode(tank_assembler, 'sample_origin', flat=False)
+
+    from mccode_antlr.io import extract
+    extract.extract_to_directory(bifrost.instrument, Path() / "bifrost_extract")
 
     # The following test is extremely fragile and only useful when making possibly
     # breaking changes for local testing. The CI does not enforce the McCode version

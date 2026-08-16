@@ -15,11 +15,9 @@ from ..components import (
 from ..utilities import calibration
 
 
-class Primary(Section):
-
-    source: ESSource
-
-    # compressor section
+class Compressor(Section):
+    """The compressor section collects neutrons from the moderator and directs
+    them towards the pulse shaping choppers"""
     nboa_entry_window: Filter
     nboa: EllipticGuide  # Neutron Beam Optics Assembly
     nboa_exit_window: Filter
@@ -30,11 +28,10 @@ class Primary(Section):
     psc_housing_entry_window: Filter
     nose: EllipticGuide
 
-    # pulse shaping choppers (not in a named section ...)
-    pulse_shaping_chopper_1: DiscChopper
-    pulse_shaping_chopper_2: DiscChopper
 
-    # curved guide section
+class Curved(Section):
+    """The curved section starts after the pulse shaping choppers, includes both
+    frame overlap choppers, and leads to the bunker wall feedthrough."""
     unit_3_curved: StraightGuides
     psc_exit_window: Filter
     psc_monitor: FissionChamber
@@ -58,7 +55,11 @@ class Primary(Section):
     unit_14_curved: StraightGuides
     unit_15_curved: StraightGuides
 
-    # expanding guide section
+
+class Expanding(Section):
+    """The expanding section is the transition from the end of the curved guide
+    to the larger straight guide. It starts with the bunker wall insert and
+    expands elliptically."""
     unit_16_bw_insert: EllipticGuide  # Bunker wall insert, first part
     unit_17_bw_insert: EllipticGuide  # Bunker wall insert, second part
     unit_17_exit_window: Filter
@@ -77,7 +78,12 @@ class Primary(Section):
     unit_28_expanding: EllipticGuide
     unit_28_exit_window: Filter
 
-    # straight guide transport section
+
+class Straight(Section):
+    """The straight guide section is the main beam transport element.
+    It includes the bandwidth choppers, beam attenuators, and goes from the
+    end of the elliptically expanding section to the beginning of the
+    elliptically focusing section"""
     unit_29_entry_window: Filter
     unit_29_straight: StraightGuide
     unit_30_straight: StraightGuide
@@ -136,7 +142,11 @@ class Primary(Section):
     unit_74_straight: StraightGuide
     unit_75_straight: StraightGuide
 
-    # focusing section
+
+class Closing(Section):
+    """The closing section controls the size and divergence of the beam that
+    is incident on the sample position. It is fed by the straight guide section
+    and includes three horizontal divergence jaws."""
     unit_76_closing: EllipticGuide
     unit_77_closing: EllipticGuide
     unit_78_closing: EllipticGuide
@@ -154,11 +164,27 @@ class Primary(Section):
     jaw_1: Jaw
     unit_88_closing: EllipticGuide
     unit_88_exit_window: Filter
+
+
+class Primary(Section):
+    source: ESSource
+    compressor: Compressor
+    # pulse shaping choppers (not in a named section ...)
+    pulse_shaping_chopper_1: DiscChopper
+    pulse_shaping_chopper_2: DiscChopper
+    # Guide sections
+    curved: Curved
+    expanding: Expanding
+    straight: Straight
+    closing: Closing
+
     mask: Slit
     normalization_monitor: GEM2D
     slit: Slit
 
     sample_origin: Component
+
+    _flat: bool = True  # Do not insert this section as nested when translating
 
     @classmethod
     @calibration
@@ -167,5 +193,3 @@ class Primary(Section):
         if len(parameters) == 0:
             parameters = primary_parameters()
         return super().from_calibration(parameters)
-
-

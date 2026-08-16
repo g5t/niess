@@ -140,15 +140,17 @@ def primary_parameters(use_tcs=False):
         'orientation': w4_orientation,
     }
 
-    p.update(primary_compressor_parameters(guide_zero, guide_zero_rot))
+    # p.update(primary_compressor_parameters(guide_zero, guide_zero_rot))
+    p['compressor'] = primary_compressor_parameters(guide_zero, guide_zero_rot)
+    nose = p['compressor']['nose']
 
     bunker_chopper_height = scalar(0.047514 + 2 * 0.00331, unit='m')  # 2 * margin of error for floor settling in bunker
     hall_chopper_height = scalar(0.09 + 2 * 0.00423, unit='m')  # 2 * margin of error for piles settling under the long guide hall
     radius = 350 * mm
     offset = -(radius - bunker_chopper_height / 2) * vector([0, 1., 0])
     p['pulse_shaping_chopper_1'] = {
-        'position': at_relative(p['nose']['end'], p['nose']['orientation'], (0.0306 * m) * z) - offset,
-        'orientation': p['nose']['orientation'],
+        'position': at_relative(nose['end'], nose['orientation'], (0.0306 * m) * z) - offset,
+        'orientation': nose['orientation'],
         'radius': radius,
         'height': bunker_chopper_height,
         'angle': scalar(170., unit='deg'),
@@ -172,27 +174,24 @@ def primary_parameters(use_tcs=False):
     # the gap from the end of the nose-guide to the start of the first curved guide
     # segment inside the PSC housing is 84 mm
     element_6_to_element_5 = 84 * mm
-    rel_r = p['nose']['orientation']
-    rel_p = at_relative(p['nose']['end'], rel_r, element_6_to_element_5 * z)
+    rel_r = nose['orientation']
+    rel_p = at_relative(nose['end'], rel_r, element_6_to_element_5 * z)
 
     # Element 6 in the old McStas instrument is the curved section. It includes
     # the first and second frame overlap choppers and a copper-substrate 'collimation'
     # section which helps prevent streaming
-    el6, rel_p, rel_r = curved_guide_parameters(rel_p, rel_r, bunker_chopper_height)
-    p.update(el6)
+    p['curved'], rel_p, rel_r = curved_guide_parameters(rel_p, rel_r, bunker_chopper_height)
 
     # Following the curved section is the expanding 'connector' section including
     # the bunker wall feed through. There is a monitor but no choppers here
-    ex, rel_p, rel_r = expanding_guide_parameters(rel_p, rel_r)
-    p.update(ex)
+    p['expanding'], rel_p, rel_r = expanding_guide_parameters(rel_p, rel_r)
 
     # The straight section includes the bandwidth choppers and a monitor
-    ex, rel_p, rel_r = straight_guide_parameters(rel_p, rel_r, hall_chopper_height)
-    p.update(ex)
+    p['straight'], rel_p, rel_r = straight_guide_parameters(rel_p, rel_r, hall_chopper_height)
 
     # The closing section focuses the beam and includes divergence limiting jaws
-    ex, rel_p, rel_r = closing_guide_parameters(rel_p, rel_r)
-    p.update(ex)
+    p['closing'], rel_p, rel_r = closing_guide_parameters(rel_p, rel_r)
+
     # The reference point is now the downstream side of the final window.
     # The sample is exactly 578 mm from this position, but there are other things before
 

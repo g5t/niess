@@ -26,11 +26,11 @@ dependencies = [
   "scipp>=25.11.0",
   "numpy",
   "scipy",
-  "mccode-antlr>=0.21.0",
+  "mccode-antlr>=0.24.0",
   "mccode-to-kafka>=0.2.2",
   "msgspec>=0.20.0",
-  "networkx>=3.6", # required for B4C_sg166_BoronCarbide
-  "ncrystal>=4.2.4",
+  "networkx>=3.6",
+  "ncrystal>=4.2.4", # required for B4C_sg166_BoronCarbide
 ]
 
 [project.optional-dependencies]
