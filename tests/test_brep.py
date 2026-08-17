@@ -38,7 +38,7 @@ def test_to_mccode_adds_niess_metadata():
     )
 
     assembler = Assembler('guide_test', flavor=Flavor.MCSTAS)
-    instance = guide.to_mccode(assembler, insert_brep_metadata=True)
+    instance = guide.to_mccode(assembler, insert_provenance_metadata=True)
     payload = read_niess_metadata(instance)
 
     assert payload is not None
@@ -72,7 +72,7 @@ def test_straight_guide_brep_override():
     )
 
     assembler = Assembler('guide_test', flavor=Flavor.MCSTAS)
-    mccode_guide = guide.to_mccode(assembler, insert_brep_metadata=True)
+    mccode_guide = guide.to_mccode(assembler, insert_provenance_metadata=True)
     add_niess_metadata(mccode_guide, guide, extra={'substrate': substrate})
 
     assembly = instrument_to_assembly(assembler.instrument)
@@ -101,7 +101,7 @@ def test_slit_brep_override_uses_metadata_dimensions():
     )
 
     assembler = Assembler('slit_test', flavor=Flavor.MCSTAS)
-    slit.to_mccode(assembler, insert_brep_metadata=True)
+    slit.to_mccode(assembler, insert_provenance_metadata=True)
     assembly = instrument_to_assembly(assembler.instrument)
 
     child = _assembly_child(assembly)
@@ -131,7 +131,7 @@ def test_filter_brep_override():
     )
 
     assembler = Assembler('filter_test', flavor=Flavor.MCSTAS)
-    filt.to_mccode(assembler, insert_brep_metadata=True)
+    filt.to_mccode(assembler, insert_provenance_metadata=True)
     assembly = instrument_to_assembly(assembler.instrument)
 
     child = _assembly_child(assembly)

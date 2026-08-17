@@ -97,13 +97,13 @@ class DiscChopper(Chopper):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         from ..mccode import ensure_runtime_line as ensure
         ensure(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
         ensure(assembler, f'{self.name}phase/"degree" = {self.phase.to(unit="deg").value}')
         # the offset is handled by super's to_mccode -- no problems.
-        return super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        return super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
 
 
 class FermiChopper(Chopper):

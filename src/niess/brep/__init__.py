@@ -1,5 +1,5 @@
 from .registry import NiessBRepRegistry
-from .provenance import NiessProvenance
+from ..provenance import NiessProvenance
 from .components import instrument_to_assembly, save_step
 
 __all__ = [

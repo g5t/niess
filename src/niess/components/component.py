@@ -112,16 +112,16 @@ class Component(Base, kw_only=True):
         """Return the component type name and parameters needed to produce a McCode instance"""
         return 'Arm', {}
 
-    def __mccode_brep_role__(self) -> str:
+    def __mccode_role__(self) -> str:
         return 'physical-component'
 
-    def __mccode_brep_extra__(self) -> dict[str, Any]:
+    def __mccode_extra__(self) -> dict[str, Any]:
         return {}
 
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         from mccode_antlr.common.parameters import InstrumentParameter as InstPar
         from ..spatial import mccode_ordered_angles
@@ -144,11 +144,11 @@ class Component(Base, kw_only=True):
         rot = (mccode_ordered_angles(self.orientation), rot_rel)
 
         instance = assembler.component(self.name, comp, at=at, rotate=rot, parameters=pars)
-        if insert_brep_metadata:
+        if insert_provenance_metadata:
             return add_niess_metadata(
                 instance,
                 self,
-                role=self.__mccode_brep_role__(),
-                extra=self.__mccode_brep_extra__(),
+                role=self.__mccode_role__(),
+                extra=self.__mccode_extra__(),
             )
         return instance

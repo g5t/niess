@@ -7,7 +7,7 @@ from niess.components.aperture import Jaw, Slit
 from niess.components.filter import Attenuator, NCrystalFilter, RadialFilterCollimator
 from niess.components.guide import EllipticGuide, StraightGuide, TaperedGuide
 from niess.components.source import ESSource
-from .provenance import NiessProvenance
+from ..provenance import NiessProvenance
 from .registry import DEFAULT_BREP_REGISTRY
 
 _APERTURE_THICKNESS = 1e-4

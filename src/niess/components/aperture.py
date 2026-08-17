@@ -23,7 +23,7 @@ class Aperture(Component):
             height=height
         )
 
-    def __mccode_brep_extra__(self) -> dict[str, float]:
+    def __mccode_extra__(self) -> dict[str, float]:
         return {
             'width': self.width.to(unit='m').value,
             'height': self.height.to(unit='m').value,
@@ -44,13 +44,13 @@ class Jaw(Aperture):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         from ..mccode import ensure_runtime_line as ensure
         half = self.width.to(unit='m').value / 2
         ensure(assembler, f'{self.name}_l/"m" = {-half}')
         ensure(assembler, f'{self.name}_r/"m" = {half}')
-        return super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        return super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
 
 
 class Slit(Aperture):
@@ -68,7 +68,7 @@ class Slit(Aperture):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         from ..mccode import ensure_runtime_line as ensure
         half = self.width.to(unit='m').value / 2
@@ -77,4 +77,4 @@ class Slit(Aperture):
         half = self.height.to(unit='m').value / 2
         ensure(assembler, f'{self.name}_b/"m" = {-half}')
         ensure(assembler, f'{self.name}_t/"m" = {half}')
-        return super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        return super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
