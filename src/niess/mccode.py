@@ -68,6 +68,24 @@ def ensure_runtime_parameter(a: Assembler, par: InstrumentParameter):
         a.instrument.add_parameter(par)
 
 
+def root_assembler(a: Assembler) -> Assembler:
+    """The outermost Assembler of a (possibly nested) assembly.
+
+    ``Assembler.included()`` builds a section as a child assembler whose own name is
+    the section's, so anything naming itself after ``assembler.name`` inside a section
+    picks up the section name rather than the instrument's. Walk to the root when the
+    instrument as a whole is what is meant.
+    """
+    while getattr(a, 'parent', None) is not None:
+        a = a.parent
+    return a
+
+
+def instrument_name(a: Assembler) -> str:
+    """The name of the instrument being assembled, from anywhere in the hierarchy."""
+    return root_assembler(a).name
+
+
 def ensure_registry(a: Assembler, specification: str):
     """Ensure that a register-defined parameter is declared in the instrument
 
