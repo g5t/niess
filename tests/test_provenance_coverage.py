@@ -1,0 +1,55 @@
+"""Every instance a niess-built instrument produces carries provenance metadata.
+
+Components built through ``Component.to_mccode`` are tagged for free, but a
+composite that calls ``assembler.component()`` itself has to tag the result. When
+one forgets, the instance is simply invisible to every post-hoc adapter -- no
+error, no warning, just a component missing from the STEP assembly or the NeXus
+file -- so assert the coverage rather than trusting each composite to remember.
+"""
+import pytest
+from mccode_antlr import Flavor
+from mccode_antlr.assembler import Assembler
+
+from niess.provenance import NiessProvenance
+
+
+@pytest.fixture(scope='module')
+def bifrost():
+    from niess.bifrost.parameters import primary_parameters, tank_parameters
+    from niess.bifrost import Primary, Tank
+
+    assembler = Assembler('bifrost', flavor=Flavor.MCSTAS)
+    Primary.from_calibration(primary_parameters()).to_mccode(assembler)
+    Tank.from_calibration(tank_parameters()).to_mccode(assembler, 'sample_origin')
+    return assembler.instrument
+
+
+def test_no_instance_is_left_untagged(bifrost):
+    untagged = [c.name for c in bifrost.components
+                if NiessProvenance.from_instance(c) is None]
+    assert not untagged, f'{len(untagged)} untagged instances, e.g. {untagged[:5]}'
+
+
+def test_composite_built_instances_are_tagged(bifrost):
+    """The component types that only ever come from a hand-built composite."""
+    by_type = {}
+    for component in bifrost.components:
+        provenance = NiessProvenance.from_instance(component)
+        by_type.setdefault(component.type.name, []).append(provenance)
+
+    for type_name in ('Monochromator_Rowland', 'Detector_tubes', 'Slit_radial_multi'):
+        assert type_name in by_type, f'{type_name} missing from the assembled instrument'
+        assert all(p is not None for p in by_type[type_name])
+
+
+def test_reference_frames_are_distinguishable_from_components(bifrost):
+    """Coordinate-reference Arms take a role that sets them apart."""
+    roles = {}
+    for component in bifrost.components:
+        provenance = NiessProvenance.from_instance(component)
+        roles.setdefault(provenance.role, 0)
+        roles[provenance.role] += 1
+
+    assert roles.keys() == {'physical-component', 'reference-frame'}
+    assert roles['reference-frame'] > 0
+    assert roles['physical-component'] > 0
