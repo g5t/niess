@@ -9,11 +9,6 @@ def nexus_structure_metadata(topic: str, source: str, *, variables, constants):
     from json import dumps
     from mccode_antlr.common import MetaData
     from mccode_to_kafka.writer import da00_dataarray_config
-    # TODO update eniius.utils.mccode_component_eniius_data to use ('*', 'application/json') instead of
-    #      only ('eniius_data', 'json')
-    # The correct JSON to encode is a dictionary with a single key, 'data', which itself is a dictionary with
-    # the keys 'type' and 'value'. The value of 'type' is 'dict' and the value of 'value' is the actual NeXus structure.
-    # This is very hacky and is (currently) necessary to escape parsing within eniius.
 
     struct = da00_dataarray_config(topic, source=source, variables=variables, constants=constants)
 
@@ -52,13 +47,36 @@ class FrameMonitor(Component):
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
             insert_provenance_metadata: bool = True,
+            nexus_stream: dict | None = None,
     ):
-        from niess.mccode import ensure_registry
+        """Add this monitor to an instrument.
+
+        ``nexus_stream`` chooses how the monitor's data reaches NeXus, e.g.
+        ``{'module': 'ev44', 'topic': ..., 'source': ...}``. Which protocol suits a
+        given monitor is a property of the instrument setup, so the choice is made
+        here, by whoever builds the instrument, and recorded in the provenance
+        metadata for :mod:`niess.nexus` to read back. Left unset, the monitor keeps
+        its da00 histogram stream.
+        """
+        from niess.mccode import add_niess_metadata, ensure_registry
         ensure_registry(assembler, 'mcdotstar/mcstas-frame-tof-monitor@main')
 
         inst = super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
-        # Build the NeXus Structure entry to point to the correct Kafka stream
-        return add_monitor_metadata(assembler.name, inst, self.time_bins())
+
+        if nexus_stream is None:
+            # Default: a da00 histogram stream, described by a METADATA block
+            return add_monitor_metadata(assembler.name, inst, self.time_bins())
+
+        if insert_provenance_metadata:
+            add_niess_metadata(
+                inst, self,
+                role=self.__mccode_role__(),
+                extra=self.__mccode_extra__() | {'nexus_stream': nexus_stream},
+            )
+        if nexus_stream.get('module') == 'da00' and 'config' not in nexus_stream:
+            # da00 wanted, but no configuration given: build the standard one
+            return add_monitor_metadata(assembler.name, inst, self.time_bins())
+        return inst
 
     def __partial__mccode__(self) -> tuple[str, dict]:
         return 'Frame_monitor', {'nt': self.time_bins(), 'frequency': 14.0}

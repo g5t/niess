@@ -36,6 +36,9 @@ dependencies = [
 [project.optional-dependencies]
 test = ['pytest']
 
+[project.scripts]
+instr2ns = "niess.nexus.cli:convert"
+
 [project.urls]
 Documentation = "https://github.com/g5t/niess#readme"
 Issues = "https://github.com/g5t/niess/issues"
