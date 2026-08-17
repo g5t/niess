@@ -164,7 +164,7 @@ class Tank(Base):
             **kwargs
     ):
         from scipp import vector, concat, max, atan2
-        from ..mccode import ensure_user_var, ensure_registry
+        from ..mccode import add_niess_metadata, ensure_user_var, ensure_registry
         ensure_registry(assembler, "mcdotstar/mcstas-slit-radial@main") # for slits
         ensure_user_var(assembler, 'int', 'secondary_cassette', 'Secondary spectrometer analyzer cassette index')
 
@@ -181,6 +181,7 @@ class Tank(Base):
         declared_positions = f'{slits_name}_positions'
         assembler.declare_array('double', declared_positions, positions, source=__file__, line=173)
         slits = assembler.component(slits_name, 'Slit_radial_multi', at=((0, 0, 0,), sample))
+        add_niess_metadata(slits, self, source_name=slits_name, role='physical-component')
         slits.set_parameters(slit_width=cov_x, offset='slitAngle*DEG2RAD',
                              number=len(positions), radius='slitDistance', height=0.2,
                              positions=declared_positions)

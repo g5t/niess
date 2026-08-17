@@ -178,10 +178,13 @@ class Channel(Base):
 
     def to_mccode(self, assembler: Assembler, relative: Instance, name: str, when: str = None, settings: dict = None, flat: bool=True, **kwargs):
         from scipp import concat, all, isclose, vector
+        from niess.mccode import add_niess_metadata
         # For each channel we need to define the local coordinate system, relative to the provided sample
         origin = vector([0, 0, 0], unit='m')
         ra0 = self.sample_space_angle(origin).to(unit='degree').value
         cassette = assembler.component(f"{name}_arm", "Arm", at=((0, 0, 0), relative), rotate=((0, ra0, 0), relative))
+        add_niess_metadata(cassette, self, source_name=f'{name}_arm', role='reference-frame',
+                           extra={'frame': 'cassette', 'channel': name})
         cassette.WHEN(when)
 
         for uv in ('int secondary_scattered;', 'int analyzer;', 'int flag;'):
