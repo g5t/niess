@@ -128,3 +128,35 @@ def test_bifrost_efu_parameters():
         assert 'polynomials' in param and len(param['polynomials']) == 3
         for polynomial in param['polynomials']:
             assert len(polynomial) == 4
+
+
+def assembled_bifrost():
+    from mccode_antlr import Flavor
+    from mccode_antlr.assembler import Assembler
+    from niess.bifrost.parameters import primary_parameters, tank_parameters
+    from niess.bifrost import Primary, Tank
+
+    assembler = Assembler('bifrost', flavor=Flavor.MCSTAS)
+    Primary.from_calibration(primary_parameters()).to_mccode(assembler)
+    Tank.from_calibration(tank_parameters()).to_mccode(assembler, 'sample_origin')
+    return assembler.instrument
+
+
+def test_elastic_monitor_is_placed_and_rotated_in_the_tank_frame():
+    """The elastic monitor turns with the tank.
+
+    `sample` in Tank.to_mccode is the tank's rotating reference frame -- it shares
+    the sample's origin but is not the sample. Positioning the monitor there while
+    leaving its rotation to default (which Component.to_mccode makes ABSOLUTE) left
+    the monitor's 59-degree orientation fixed in the lab while the tank turned
+    around it.
+    """
+    monitor = next(c for c in assembled_bifrost().components if c.name == 'elastic_monitor')
+
+    at_reference = monitor.at_relative[1]
+    rotate_reference = monitor.rotate_relative[1]
+
+    assert at_reference is not None
+    assert rotate_reference is not None, 'rotation must not fall back to ABSOLUTE'
+    assert at_reference.name == 'sample_origin'
+    assert rotate_reference.name == 'sample_origin'

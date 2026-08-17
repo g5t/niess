@@ -189,8 +189,12 @@ class Tank(Base):
         # This could be `secondary_cassette = 1 + slit;` unambiguously
         slits.EXTEND("secondary_cassette = (SCATTERED) ? 1 + slit : -1;")
 
-        # Insert the Bragg Peak elastic monitor -- it is outside the slits
-        mon = self.monitor.to_mccode(assembler, at=sample)
+        # Insert the Bragg Peak elastic monitor -- it is outside the slits.
+        # Rotated relative to `sample` as well as positioned there: `sample` is the
+        # tank's rotating reference frame (sharing the sample's origin), and the
+        # monitor turns with the tank. Left to default, the rotation would be
+        # ABSOLUTE and the monitor would stay put as the tank rotated around it.
+        mon = self.monitor.to_mccode(assembler, at=sample, rotate=sample)
         # The slit for this monitor was added last, so it _is_ the last one
         mon.WHEN(f"secondary_cassette == {len(positions)}")
 
