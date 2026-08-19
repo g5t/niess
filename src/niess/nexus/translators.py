@@ -259,4 +259,7 @@ def multi_slit_chopper_translator(t):
         children.append(dataset('beam_position', float(extra['beam_position']),
                                 attrs={'units': 'degrees'}))
 
-    return component_body('NXdisk_chopper', children)
+    # The group carries the disc's own name: "_slit_0" is an artefact of splitting it
+    # across McStas components, and means nothing to a reader of the NeXus file.
+    return component_body('NXdisk_chopper', children,
+                          name=t.provenance.extra.get('nexus_group_id'))

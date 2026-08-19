@@ -202,7 +202,10 @@ def instrument_group(structure):
 def test_the_openings_are_rebuilt_as_one_nexus_group(assembled):
     instrument = instrument_group(to_nexus_structure(assembled, origin='sample'))
 
-    disc = find_child(instrument, 'pack_slit_0')
+    # named for the disc, not for the instance that happened to carry it: "_slit_0"
+    # is an artefact of the McStas split and means nothing to a reader of the file
+    disc = find_child(instrument, 'pack')
+    assert find_child(instrument, 'pack_slit_0') is None
     assert get_attribute(disc, 'NX_class') == 'NXdisk_chopper'
     assert find_child(disc, 'slits')['config']['values'] == 3
     # the edges reach NeXus exactly as calibrated, straddling edge and all
@@ -212,7 +215,7 @@ def test_the_openings_are_rebuilt_as_one_nexus_group(assembled):
     # the speed is a run-time parameter, so it links rather than holding a number
     assert get_attribute(find_child(disc, 'rotation_speed'), 'NX_class') == 'NXlog'
 
-    for name in ('pack_slit_1', 'pack_slit_2'):
+    for name in ('pack_slit_0', 'pack_slit_1', 'pack_slit_2'):
         assert find_child(instrument, name) is None
 
 
@@ -225,7 +228,7 @@ def test_rebuilding_follows_the_tags_not_the_instance_order(assembled):
     assert [c.name for c in assembled.components][1] == 'pack_slit_2'
 
     instrument = instrument_group(to_nexus_structure(assembled, origin='sample'))
-    disc = find_child(instrument, 'pack_slit_0')
+    disc = find_child(instrument, 'pack')
     assert find_child(disc, 'slit_edges')['config']['values'] == EDGES
 
 
@@ -248,3 +251,29 @@ def test_without_the_translator_the_mccode_view_survives(assembled):
         node = find_child(instrument, name)
         assert get_attribute(node, 'NX_class') == 'NXdisk_chopper'
         assert find_child(node, 'slits')['config']['values'] == 1
+
+
+def test_a_renamed_group_is_still_a_valid_placement_target():
+    """Renaming must not dangle the references of whatever is placed against it.
+
+    A component placed relative to `pack_slit_0` has to end up depending on a path that
+    exists -- which is inside the group as written, `pack`, not the instance name.
+    """
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    MultiSlitChopper.from_calibration(calibration()).to_mccode(
+        assembler, at='origin', rotate='origin')
+    assembler.component('sample', 'Arm', at=((0, 0, 3), 'pack_slit_0'))
+
+    instrument = instrument_group(
+        to_nexus_structure(assembler.instrument, origin='sample'))
+
+    transformations = find_child(find_child(instrument, 'sample'), 'transformations')
+    target = get_attribute(transformations['children'][0], 'depends_on')
+    assert target.startswith('/entry/instrument/pack/')
+
+    # ...and the thing it points at is really there
+    group, _, name = target.rpartition('/')
+    assert group == '/entry/instrument/pack/transformations'
+    assert find_child(find_child(find_child(instrument, 'pack'), 'transformations'),
+                      name) is not None

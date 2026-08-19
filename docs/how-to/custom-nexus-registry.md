@@ -62,6 +62,12 @@ literal-or-link decision for you. Use `parameter` only for values you need in Py
 
 Build children with `dataset`, `group` and `stream`, all importable from `niess.nexus`.
 
+`component_body` also takes a `name`, which overrides the group's name — by default the
+McStas instance's. Use it where that name is an artefact of how the instrument was
+built: a composite split across several instances should appear under the name of the
+thing itself, not `thing_slit_0`. Placements referring to the instance still resolve;
+the emitted path follows the name you chose.
+
 ## Using it
 
 Pass the registry per conversion:
@@ -103,6 +109,9 @@ def merged(t):
 
 Tag by explicit role rather than relying on declaration order — `siblings_in_group()`
 sorts by `nexus_group_index`, so the merged node is stable even if the instances move.
+
+Give the merged node the object's own name with `component_body(..., name=...)`, so the
+file describes the device rather than the components it was split across.
 
 Suppressed instances are still recorded internally, so a later component placed
 relative to one still resolves its transformation chain; the walk warns if that

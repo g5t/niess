@@ -79,9 +79,25 @@ NEXUS_CLASS_PARAMETERS = {
 }
 
 
-def component_body(nx_class: str, children: list | None = None, attrs: dict | None = None) -> dict:
-    """What a translator returns: the class and contents of one component's group."""
-    return {'nx_class': nx_class, 'children': list(children or []), 'attrs': dict(attrs or {})}
+def component_body(
+        nx_class: str,
+        children: list | None = None,
+        attrs: dict | None = None,
+        name: str | None = None,
+) -> dict:
+    """What a translator returns: the class and contents of one component's group.
+
+    ``name`` overrides the group's name, which defaults to the McStas instance's. Use
+    it where the instance name is an artefact of how the instrument was built rather
+    than something a reader of the file should see -- a composite emitted as several
+    instances, say, whose NeXus group should carry the name of the thing itself.
+    """
+    return {
+        'nx_class': nx_class,
+        'children': list(children or []),
+        'attrs': dict(attrs or {}),
+        'name': name,
+    }
 
 
 @dataclass
@@ -258,10 +274,13 @@ class NexusContext:
 
     def resolve_target(self, rel) -> str | None:
         """The absolute path a relative placement should depend on."""
-        target = f'{INSTRUMENT_PATH}/{rel.name}'
         node = self.nodes.get(rel.name)
         if node is None:
             raise RuntimeError(f'transformations for {rel.name} defined out of order')
+        # The path uses the name the group was *written* under, which a translator may
+        # have overridden; self.nodes stays keyed by the McStas instance name, because
+        # that is what a placement refers to.
+        target = f'{INSTRUMENT_PATH}/{node_name(node)}' 
         if rel.name in self.suppressed:
             # The chain still resolves, but nothing will be written at that path
             logger.warning(
@@ -412,7 +431,7 @@ def translate_instance(context: NexusContext, instance, index: int) -> tuple[dic
             suppressed = True
             body = fallback_body(translation, bool(transformations))
 
-    node = group(instance.name, body['nx_class'],
+    node = group(body.get('name') or instance.name, body['nx_class'],
                  children=list(body['children']), attrs=body['attrs'])
 
     if transformations:

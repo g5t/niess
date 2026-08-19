@@ -65,7 +65,9 @@ def main(outdir: Path) -> None:
     structure = to_nexus_structure(assembler.instrument, origin='sample')
     instrument = structure['children'][0]['children'][0]
 
-    disc_group = find_child(instrument, 'pack_slit_0')
+    # named for the disc itself: "_slit_0" is a McStas artefact, not something a
+    # reader of the NeXus file should have to know about
+    disc_group = find_child(instrument, 'pack')
     assert get_attribute(disc_group, 'NX_class') == 'NXdisk_chopper'
     assert find_child(disc_group, 'slits')['config']['values'] == 3
     assert find_child(disc_group, 'slit_edges')['config']['values'] == [
@@ -74,9 +76,9 @@ def main(outdir: Path) -> None:
     assert find_child(disc_group, 'top_dead_center')['config']['values'] == 15.0
     assert find_child(disc_group, 'beam_position')['config']['values'] == 90.0
 
-    # ...and the other two openings are gone, folded into the one above
-    assert find_child(instrument, 'pack_slit_1') is None
-    assert find_child(instrument, 'pack_slit_2') is None
+    # ...and the three components it was split across are gone
+    for index in range(3):
+        assert find_child(instrument, f'pack_slit_{index}') is None
     # --8<-- [end:result]
 
     # The same tags drive the CAD adapter: niess.brep dispatches on role too, so one

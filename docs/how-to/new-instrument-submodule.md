@@ -243,7 +243,8 @@ list, and nothing guarantees the primary comes first.
 `niess.nexus` ships the matching translator, registered against the component's *niess
 source type* — the first dispatch tier — so no configuration is needed. The primary
 instance rebuilds the disc from its siblings; the members return `None`, which means
-emit nothing:
+emit nothing. The rebuilt group takes the disc's own name, since `pack_slit_0` describes
+how the instrument was built rather than what it contains:
 
 ```python
 --8<-- "group_composite.py:result"
