@@ -184,14 +184,8 @@ def detector_tubes_translator(t):
     return component_body('NXdetector', children)
 
 
-@BIFROST_REGISTRY.register_component_type('Frame_monitor')
-def frame_monitor_translator(t):
-    """A frame monitor: same shape as any other monitor, same stream resolution.
-
-    ``FrameMonitor.to_mccode`` attaches a da00 histogram configuration as a METADATA
-    block unless the instrument selected something else, so the stream arrives here
-    through the metadata tier of :func:`niess.nexus.streams.resolve_stream` and needs
-    no default of its own.
-    """
-    from .translators import monitor_translator
-    return monitor_translator(t)
+# Frame_monitor is deliberately NOT registered here. niess.components.monitors
+# emits it for every instrument, not just BIFROST, and its translation is the
+# generic monitor one -- so it lives on DEFAULT_NEXUS_REGISTRY in translators.py.
+# Registered here it would have stranded every other instrument's monitors as
+# NXcoordinate_system, discarding the da00 stream their METADATA already carries.

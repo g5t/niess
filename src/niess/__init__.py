@@ -14,15 +14,15 @@ from .components import (
 from .brep import NiessBRepRegistry, instrument_to_assembly, save_step
 
 __all__ = [
-    DirectSecondary,
-    IndirectSecondary,
-    IdealCrystal,
-    Crystal,
-    Wire,
-    DiscreteWire,
-    DiscreteTube,
-    He3Tube,
-    NiessBRepRegistry,
-    instrument_to_assembly,
-    save_step,
+    'DirectSecondary',
+    'IndirectSecondary',
+    'IdealCrystal',
+    'Crystal',
+    'Wire',
+    'DiscreteWire',
+    'DiscreteTube',
+    'He3Tube',
+    'NiessBRepRegistry',
+    'instrument_to_assembly',
+    'save_step',
 ]

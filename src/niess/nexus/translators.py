@@ -196,7 +196,7 @@ def elliptic_guide_gravity_translator(t):
     ])
 
 
-@DEFAULT_NEXUS_REGISTRY.register_component_type('TOF_monitor', 'PSD_monitor')
+@DEFAULT_NEXUS_REGISTRY.register_component_type('TOF_monitor', 'PSD_monitor', 'Frame_monitor')
 def monitor_translator(t, default_stream: dict | None = None):
     """A monitor's sensitive face, as a thin wedge, plus whatever it streams.
 

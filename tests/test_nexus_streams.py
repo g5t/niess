@@ -170,3 +170,41 @@ END
     structure = to_nexus_structure(parse_mcstas_instr(src), origin='sample')
     moderator = find_child(structure['children'][0]['children'][0], 'source')
     assert get_attribute(moderator, 'NX_class') == 'NXmoderator'
+
+
+def test_generic_niess_monitor_keeps_its_da00_stream():
+    """A niess monitor converts fully without any instrument-specific registry.
+
+    Every FrameMonitor subclass emits the McStas type `Frame_monitor` and attaches a
+    da00 configuration as METADATA. While `Frame_monitor` was registered only on
+    BIFROST_REGISTRY, a non-BIFROST instrument's monitors fell through to the generic
+    fallback: NXcoordinate_system, with the stream config sitting unused on the
+    instance.
+    """
+    from mccode_antlr import Flavor
+    from mccode_antlr.assembler import Assembler
+    from scipp import scalar, vector
+    from scipp.spatial import rotations_from_rotvecs
+    from niess.components import FissionChamber
+    from niess.nexus import to_nexus_structure
+
+    assembler = Assembler('teaching', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    FissionChamber.from_calibration({
+        'name': 'mon',
+        'position': vector([0, 0, 2.0], unit='m'),
+        'orientation': rotations_from_rotvecs(vector([0, 0, 0.0], unit='deg')),
+        'width': scalar(50.0, unit='mm'),
+        'height': scalar(50.0, unit='mm'),
+        'thickness': scalar(1.0, unit='mm'),
+    }).to_mccode(assembler, at='origin', rotate='origin')
+    assembler.component('sample_origin', 'Arm', at=((0, 0, 5), 'origin'))
+
+    structure = to_nexus_structure(assembler.instrument, origin='sample_origin')
+    monitor = find_child(structure['children'][0]['children'][0], 'mon')
+
+    assert get_attribute(monitor, 'NX_class') == 'NXmonitor'
+    assert find_child(monitor, 'OFF_GEOMETRY') is not None
+    data = find_child(monitor, 'data')
+    assert stream_module(data) == 'da00'
+    assert data['children'][0]['config']['topic'] == 'teaching_beam_monitor'

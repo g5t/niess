@@ -28,8 +28,21 @@ def test_importing_bifrost_leaves_the_default_registry_alone():
     from niess.nexus import bifrost  # noqa: F401
     assert DEFAULT_NEXUS_REGISTRY.registered_component_types() == before
 
-    for type_name in ('Monochromator_Rowland', 'Detector_tubes', 'Frame_monitor'):
+    for type_name in ('Monochromator_Rowland', 'Detector_tubes', 'Detector_time_tubes'):
         assert DEFAULT_NEXUS_REGISTRY.resolve_builder(FakeInstance(type_name)) is None
+
+
+def test_frame_monitor_is_generic_not_bifrost_specific():
+    """niess.components.monitors emits Frame_monitor for every instrument.
+
+    Registered on BIFROST_REGISTRY it stranded every other instrument's monitors as
+    NXcoordinate_system, silently discarding the da00 stream their METADATA carries,
+    so it belongs on the default registry with the other monitor types.
+    """
+    from niess.nexus.translators import monitor_translator
+
+    assert DEFAULT_NEXUS_REGISTRY.resolve_builder(
+        FakeInstance('Frame_monitor')) is monitor_translator
 
 
 def test_bifrost_registry_resolves_its_own_translators():
@@ -118,3 +131,24 @@ def test_detector_tubes_translation_follows_the_registry(registry_name):
         # crucially not BIFROST's detector topic or ICD pixel numbering
         assert get_attribute(tubes, 'NX_class') == 'NXcoordinate_system'
         assert find_child(tubes, 'data') is None
+
+
+def test_load_registry_imports_by_module_and_name():
+    from niess.nexus.bifrost import BIFROST_REGISTRY
+    from niess.nexus.cli import load_registry
+
+    assert load_registry(None) is None
+    assert load_registry('niess.nexus.bifrost:BIFROST_REGISTRY') is BIFROST_REGISTRY
+
+
+@pytest.mark.parametrize('specification', ['niess.nexus.bifrost', 'no_colon_here', ':X'])
+def test_load_registry_rejects_malformed_specifications(specification):
+    from niess.nexus.cli import load_registry
+    with pytest.raises(ValueError, match='module:attribute'):
+        load_registry(specification)
+
+
+def test_load_registry_reports_a_missing_attribute():
+    from niess.nexus.cli import load_registry
+    with pytest.raises(ValueError, match='defines no NOT_A_REGISTRY'):
+        load_registry('niess.nexus.bifrost:NOT_A_REGISTRY')

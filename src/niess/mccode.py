@@ -57,15 +57,16 @@ def ensure_runtime_parameter(a: Assembler, par: InstrumentParameter):
     default, type, or units will raise an error.
     """
     held = a.instrument.get_parameter(par.name)
-    if held := a.instrument.get_parameter(par.name) and held != par:
+    if held is None:
+        a.instrument.add_parameter(par)
+        return
+    if held != par:
         msg = f"Parameter {par.name} already defined"
         if held.value is not None:
             msg += f" with value {held.value}"
         if held.unit is not None:
             msg += f" {held.unit}"
         raise RuntimeError(msg)
-    else:
-        a.instrument.add_parameter(par)
 
 
 def root_assembler(a: Assembler) -> Assembler:

@@ -22,8 +22,21 @@ from .instrument import (
     to_nexus_structure,
 )
 from .cli import load_instr
+# The node constructors a translator builds its output from, and the readers used to
+# inspect a finished structure. Re-exported so writing a translator needs one import.
+from .nodes import (
+    attribute,
+    children_of,
+    dataset,
+    find_child,
+    get_attribute,
+    group,
+    node_name,
+    stream,
+)
 from .off import NXoff
 from .registry import DEFAULT_NEXUS_REGISTRY, NiessNexusRegistry
+from .streams import resolve_stream
 
 # Registers the default per-component-type translators on DEFAULT_NEXUS_REGISTRY.
 # Instrument-specific translators are deliberately absent: they live in registries
@@ -32,13 +45,25 @@ from .registry import DEFAULT_NEXUS_REGISTRY, NiessNexusRegistry
 from . import translators as _translators  # noqa: F401
 
 __all__ = [
-    'DEFAULT_NEXUS_REGISTRY',
-    'DEFAULT_NXLOG_ROOT',
-    'NXoff',
+    # conversion
+    'to_nexus_structure',
     'load_instr',
     'NexusContext',
+    'DEFAULT_NXLOG_ROOT',
+    # writing translators
+    'DEFAULT_NEXUS_REGISTRY',
     'NiessNexusRegistry',
     'Translation',
     'component_body',
-    'to_nexus_structure',
+    'resolve_stream',
+    # building and reading nodes
+    'attribute',
+    'children_of',
+    'dataset',
+    'find_child',
+    'get_attribute',
+    'group',
+    'node_name',
+    'stream',
+    'NXoff',
 ]

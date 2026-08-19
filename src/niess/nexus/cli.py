@@ -27,6 +27,30 @@ def load_instr(filepath: str | Path):
     raise ValueError(f'Cannot load an instrument from {filepath.suffix} files')
 
 
+def load_registry(specification: str | None):
+    """Import a translator registry named ``module:attribute``.
+
+    ``None`` selects the default registry, which holds only the generic
+    per-component-type translators.
+    """
+    if specification is None:
+        return None
+
+    module_name, _, attribute = specification.partition(':')
+    if not module_name or not attribute:
+        raise ValueError(
+            f'Registry {specification!r} is not of the form module:attribute, '
+            'e.g. niess.nexus.bifrost:BIFROST_REGISTRY'
+        )
+
+    from importlib import import_module
+    module = import_module(module_name)
+    try:
+        return getattr(module, attribute)
+    except AttributeError:
+        raise ValueError(f'{module_name} defines no {attribute}') from None
+
+
 def convert(argv=None):
     """Print the NeXus Structure JSON for an instrument file."""
     import argparse
@@ -45,6 +69,10 @@ def convert(argv=None):
                         help='where runtime parameter values are published')
     parser.add_argument('--absolute-depends-on', action='store_true',
                         help='write depends_on targets as absolute NeXus paths')
+    parser.add_argument('--registry', type=str, default=None, metavar='MODULE:NAME',
+                        help='an instrument-specific translator registry to use, e.g. '
+                             'niess.nexus.bifrost:BIFROST_REGISTRY (default: the '
+                             'generic translators only)')
     parser.add_argument('--indent', type=int, default=None,
                         help='indent the JSON by this many spaces')
     parser.add_argument('-o', '--output', type=str, default=None,
@@ -56,6 +84,7 @@ def convert(argv=None):
         origin=args.origin,
         nxlog_root=args.nxlog_root,
         absolute_depends_on=args.absolute_depends_on,
+        registry=load_registry(args.registry),
     )
     text = dumps(structure, indent=args.indent)
 
