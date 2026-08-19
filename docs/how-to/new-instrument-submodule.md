@@ -37,11 +37,12 @@ Two rules that are easy to get wrong and quiet when you do:
     here must match both the physical beamline and the key order of the calibration
     dictionary.
 
-!!! warning "`_flat` must be the last field"
+!!! note "Underscored fields are extras, not components"
 
-    `Section.parts()` skips underscore-prefixed names but `Section.types()` does not,
-    and `Section.items()` zips the two. A `_private` field anywhere but last silently
-    misaligns names against types.
+    A field whose name starts with `_` is a per-class setting rather than a component,
+    and is invisible to `parts()`, `types()`, `items()` and `field_types()`. Add as
+    many as your section needs. They carry defaults, so msgspec requires them **after**
+    the fields that do not â€” which is why `_flat` is declared last.
 
 `_flat = True` means "emit into the assembler I was given". Without it a section nests
 itself: `Guides` has no `_flat`, so it becomes an included sub-instrument called
@@ -157,7 +158,7 @@ until the frame turns, and then quietly points the wrong way. This shipped too â
 
 - [ ] `parameters.py` holds every number, as scipp `Variable`s, chained with `at_relative`
 - [ ] Section fields are in beam order and match the calibration key order
-- [ ] `_flat` is the last field, if present
+- [ ] Underscored extras come after the component fields (msgspec requires it)
 - [ ] Hand-built instances call `add_niess_metadata`
 - [ ] Non-standard components call `ensure_registry`
 - [ ] Names derive from `instrument_name(assembler)`, never `assembler.name`

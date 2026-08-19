@@ -31,6 +31,10 @@ Sections nest. A section without `_flat = True` emits itself as an included
 sub-instrument, so the generated McStas mirrors how you think about the beamline
 rather than being one flat list.
 
+Fields whose names begin with `_` are per-class extras rather than components — `_flat`
+is one — and are ignored by every introspection method, so a section can carry as many
+as it needs.
+
 ## A calibration is a dictionary
 
 Constructing an instrument means handing it nested plain dictionaries whose keys match

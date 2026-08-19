@@ -34,8 +34,9 @@ class Primary(Section):
     sample_origin: Component
 
     # Emit into the caller's assembler rather than nesting the whole instrument inside
-    # itself. This must stay the LAST field: Section.parts() skips underscored names
-    # but Section.types() does not, so items() misaligns if it appears anywhere else.
+    # itself. Underscored fields are Section extras rather than components, so they are
+    # invisible to parts()/types()/items(); this one is declared last only because it
+    # has a default, and msgspec requires those after the fields that do not.
     _flat: bool = True
     # --8<-- [end:sections]
 
