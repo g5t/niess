@@ -55,8 +55,9 @@ Two things to notice while mapping:
 ## 3. Group into sections, in beam order
 
 Contiguous components that do one job become a `Section`. Here the two guide units
-become `Guides`, and everything becomes `Primary`. Section field order must be beam
-order — `Section.from_calibration` constructs positionally.
+become `Guides`, and everything becomes `Primary`. Section *field* order must be beam
+order, because `Section.from_calibration` constructs positionally; the calibration
+dictionary is looked up by name, so its key order is yours to choose.
 
 The declaration and the rules are covered in
 [Build a new instrument submodule](new-instrument-submodule.md#1-declare-the-structure);

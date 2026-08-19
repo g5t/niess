@@ -70,3 +70,20 @@ def test_a_defaulted_field_must_follow_the_required_ones():
         class DefaultFirst(Section):
             _flat: bool = True
             a: Component
+
+
+def test_calibration_key_order_is_irrelevant():
+    """Only the field declaration order is load-bearing.
+
+    `Section.from_calibration` walks `cls.parts()` and looks each name up in the
+    calibration dictionary, so the dictionary's own key order never participates. The
+    shipped dictionaries are written in beam order for readability, not because
+    anything requires it.
+    """
+    from niess.teaching import Primary, teaching_parameters
+
+    ordered = teaching_parameters()
+    reversed_keys = dict(reversed(list(ordered.items())))
+    assert list(reversed_keys) != list(ordered)
+
+    assert Primary.from_calibration(ordered) == Primary.from_calibration(reversed_keys)

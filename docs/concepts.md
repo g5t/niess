@@ -38,7 +38,7 @@ as it needs.
 ## A calibration is a dictionary
 
 Constructing an instrument means handing it nested plain dictionaries whose keys match
-the section field names:
+the section field names — matched by name, so their order is free:
 
 ```python
 Primary.from_calibration(teaching_parameters())

@@ -33,9 +33,12 @@ Two rules that are easy to get wrong and quiet when you do:
 
 !!! warning "Declaration order is beam order"
 
-    `Section.from_calibration` constructs its fields **positionally**, so the order
-    here must match both the physical beamline and the key order of the calibration
-    dictionary.
+    `Section.from_calibration` constructs its fields **positionally**, in the order
+    they are declared here, so the declaration order must match the physical beamline.
+
+    The calibration dictionary's *key* order does not matter: each field is looked up
+    by name. The dictionaries in this package happen to be written in beam order too,
+    which makes them easier to read against the class, but nothing enforces it.
 
 !!! note "Underscored fields are extras, not components"
 

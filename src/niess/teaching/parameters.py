@@ -135,10 +135,11 @@ def monitor_parameters(ref_p, ref_r):
 
 # --8<-- [start:chain]
 def teaching_parameters():
-    """Every number the teaching instrument needs, in beam order.
+    """Every number the teaching instrument needs.
 
-    The keys must match ``Primary``'s field names, and they must be in the same order,
-    because ``Section.from_calibration`` constructs its fields positionally.
+    The keys must match ``Primary``'s field names; their order is irrelevant, since
+    each field is looked up by name. They are written in beam order anyway, so this
+    reads alongside the class declaration.
     """
     source = source_parameters()
     ref_p, ref_r = source['position'], source['orientation']
