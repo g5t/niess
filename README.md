@@ -8,6 +8,7 @@
 ## Table of Contents
 
 - [Installation](#installation)
+- [Documentation](https://mcdotstar.github.io/niess/)
 - [License](#license)
 - [Motivation](#motivation)
 - [Use](#use)
@@ -49,71 +50,32 @@ used to provide calibrated instrument information to `McStas` and `NeXusStructur
 
 
 ## Use
-Thus far only as-designed information is provided for the BIFROST indirect geometry
-multiplexing spectrometer. You can load this information in a Python script, and use
-them to define a `niess` representation of the primary and secondary spectrometers
 
-```python
-from niess.bifrost.parameters import primary_parameters, known_channel_params
-from niess.bifrost import Primary, Tank
-primary = Primary.from_calibration(primary_parameters())
-secondary = Tank.from_calibration(known_channel_params())
-```
-
-The primary spectrometer begins at the source, here located at the nominal
-position of the viewed moderator in the Instrument Specific Coordinate System (ISCS),
-and ends with the position of the sample in the same coordinate system.
-
-The secondary spectrometer is defined in a coordinate system relative to the sample position.
-
-It is possible to convert the `niess` representations of these instrument parts to
-their `McCode` representation and insert them into a `McStas` instrument by leveraging
-an `Assembler` from the `mccode_antlr` package.
+`niess` describes an instrument once, as calibration data, and emits it as a McStas
+instrument, ESS NeXus Structure JSON, or CAD geometry:
 
 ```python
 from mccode_antlr import Flavor
 from mccode_antlr.assembler import Assembler
-from niess.bifrost.parameters import primary_parameters, tank_parameters
 from niess.bifrost import Primary, Tank
-
+from niess.bifrost.parameters import primary_parameters, tank_parameters
+from niess.nexus import to_nexus_structure
+from niess.nexus.bifrost import BIFROST_REGISTRY
 
 assembler = Assembler('bifrost', flavor=Flavor.MCSTAS)
 Primary.from_calibration(primary_parameters()).to_mccode(assembler)
-Tank.from_calibration(tank_parameters()).to_mccode(assembler, 'sample_coordinates')
+Tank.from_calibration(tank_parameters()).to_mccode(assembler, 'sample_origin')
 
-```
-
-## Optional CAD information
-
-When a `niess` object is exported to `mccode_antlr`, the emitted component instances
-can also receive niess-specific `METADATA` describing their originating niess type. This
-can be used to build a more faithful CAD representation than the default `MCDISPLAY`
-fallback:
-
-```python
-from scipp import vector, scalar
-from scipp.spatial import rotations_from_rotvecs
-from mccode_antlr import Flavor
-from mccode_antlr.assembler import Assembler
-from niess.components import Guide
-from niess.mccode import add_niess_metadata
-from niess.brep import instrument_to_assembly, save_step
-
-assembler = Assembler('instrument', flavor=Flavor.MCSTAS)
-
-width, height, substrate_thickness = 0.1, 0.2, 0.005  # m
-guide = Guide(
-    name="guide", 
-    position=vector([0, 0, 0], unit='m'), 
-    orientation=rotations_from_rotvecs(vector([0, 0, 0], unit='degree')),
-    length=scalar(1., unit='m'),
-    left=1.,  right=1., top=1., bottom=1. # m-values are unitless
+structure = to_nexus_structure(
+    assembler.instrument, origin='sample_origin', registry=BIFROST_REGISTRY,
 )
-instance = guide.to_mccode(assembler, insert_brep_metadata=True)
-# Override the standard extra information to include the guide substrate thickness,
-# which is not represented in McStas but can be drawn in CAD software
-add_niess_metadata(instance, guide, extra={'substrate': substrate_thickness})
-
-assembly = instrument_to_assembly(assembler.instrument)
-save_step(assembly, 'bifrost.step')
 ```
+
+Full documentation, including how to translate an existing McStas `.instr` into a
+`niess` submodule and how to write your own NeXus translators, is at
+**<https://mcdotstar.github.io/niess/>**.
+
+- [Install and first instrument](https://mcdotstar.github.io/niess/getting-started/)
+- [Translate a McStas .instr](https://mcdotstar.github.io/niess/how-to/translate-an-instr/)
+- [Build a new instrument submodule](https://mcdotstar.github.io/niess/how-to/new-instrument-submodule/)
+- [Produce NeXus Structure JSON](https://mcdotstar.github.io/niess/how-to/nexus-structure/)

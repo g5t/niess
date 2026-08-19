@@ -1,0 +1,133 @@
+[project]
+site_name = "niess"
+site_description = "Neutron instruments of the European Spallation Source as calibrated Python objects, emitting McStas instruments and ESS NeXus Structure JSON"
+site_author = "Gregory Tucker"
+site_url = "https://mcdotstar.github.io/niess/"
+repo_url = "https://github.com/mcdotstar/niess"
+repo_name = "mcdotstar/niess"
+edit_uri = "edit/main/docs/"
+copyright = "Copyright &copy; 2025 Gregory Tucker"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = [
+    { "Install and first instrument" = "getting-started.md" },
+    { "Core concepts" = "concepts.md" },
+  ] },
+  { "How-to guides" = [
+    { "Translate a McStas .instr" = "how-to/translate-an-instr.md" },
+    { "Build a new instrument submodule" = "how-to/new-instrument-submodule.md" },
+    { "Produce NeXus Structure JSON" = "how-to/nexus-structure.md" },
+    { "Write NeXus translators" = "how-to/custom-nexus-registry.md" },
+  ] },
+  { "Reference" = [
+    { "Components" = "reference/components.md" },
+    { "Command line" = "reference/cli.md" },
+    { "API: niess.nexus" = "reference/api/nexus.md" },
+    { "API: niess.dispatch" = "reference/api/dispatch.md" },
+  ] },
+  { "Explanation" = [
+    { "moreniius parity" = "explanation/moreniius-parity.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.edit",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "search.suggest",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "material/brightness-auto"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+accent = "indigo"
+toggle.icon = "material/brightness-7"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "indigo"
+accent = "indigo"
+toggle.icon = "material/brightness-4"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/mcdotstar/niess"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/python"
+link = "https://pypi.org/project/niess/"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+# Examples are included from docs/examples rather than pasted, so they stay executable.
+pymdownx.snippets.base_path = ["docs/examples", "."]
+pymdownx.snippets.check_paths = true
+pymdownx.snippets.dedent_subsections = true
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tasklist.custom_checkbox = true
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+inventories = ["https://docs.python.org/3/objects.inv"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+# niess.cspec.Pack and niess.bifrost.Tank import inside their class bodies, which makes
+# those imports class members; griffe cannot resolve them without the targets loaded.
+preload_modules = ["mccode_antlr", "scipp", "networkx", "msgspec"]
+docstring_style = "numpy"
+docstring_section_style = "list"
+filters = "public"
+heading_level = 2
+members_order = "source"
+merge_init_into_class = true
+separate_signature = true
+show_root_heading = true
+show_root_full_path = false
+show_signature_annotations = true
+show_source = true
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+signature_crossrefs = true
+summary = true

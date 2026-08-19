@@ -1,4 +1,14 @@
-# moreniius parity audit
+# moreniius parity
+
+`niess.nexus` replaces [`moreniius`](https://github.com/g5t/moreniius), which converted
+McCode instruments to ESS NeXus Structure JSON through a `nexusformat` object model.
+This page records what happened to every part of it, so nothing was lost silently.
+
+The regression baseline that pins the two against each other, and the classification of
+every remaining difference, is documented in
+[the golden baseline notes](https://github.com/mcdotstar/niess/blob/main/tests/data/bifrost_nexus_structure_golden.md).
+
+## Audit
 
 Every public piece of `moreniius` (13 modules, ~2200 lines), and where it went. Nothing
 is left unaccounted for: each entry is *ported*, *subsumed* (the need disappeared with
