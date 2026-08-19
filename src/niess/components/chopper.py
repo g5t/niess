@@ -193,6 +193,14 @@ class MultiSlitChopper(DiscChopper):
             params['yheight'] = self.height.to(unit='m').value
         return 'DiskChopper', params
 
+    def group_name(self) -> str:
+        """The McStas GROUP the emitted openings share.
+
+        Instance names are unique within an instrument, so deriving the group from this
+        disc's name makes it unique too.
+        """
+        return f'{self.name}_group'
+
     def _mccode_phase(self, opening: float, closing: float) -> float:
         """How far the disc turns before this opening reaches the beam, in degrees.
 
@@ -239,6 +247,10 @@ class MultiSlitChopper(DiscChopper):
                 f'{self.name}_slit_{index}', component,
                 at=placement, rotate=rotation, parameters=parameters,
             )
+            # One disc, so a neutron passes if it clears *any* opening. Ungrouped,
+            # each DiskChopper absorbs whatever misses its own slit, and a neutron
+            # would have to be inside every opening at once to survive.
+            instance.GROUP(self.group_name())
             if insert_provenance_metadata:
                 add_niess_metadata(
                     instance, self,

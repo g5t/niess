@@ -80,6 +80,38 @@ def test_each_opening_turns_to_the_beam_from_where_it_sits(assembled):
     ]
 
 
+def test_every_opening_is_in_one_group(assembled):
+    """A neutron passes the disc if it clears *any* opening.
+
+    Ungrouped, each DiskChopper absorbs whatever misses its own slit, so a neutron
+    would have to be inside all three openings at once to survive -- the instrument
+    would transmit essentially nothing. McStas GROUP is what makes them alternatives
+    rather than a series.
+    """
+    groups = {c.group for c in instances(assembled)}
+    assert groups == {'pack_group'}
+    assert 'GROUP pack_group' in str(assembled)
+
+
+def test_the_group_name_follows_the_disc_name():
+    """Instance names are unique in an instrument, so a name-derived group is too."""
+    chopper = MultiSlitChopper.from_calibration(calibration(name='second_pack'))
+    assert chopper.group_name() == 'second_pack_group'
+
+
+def test_two_discs_do_not_share_a_group():
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    for name in ('first', 'second'):
+        MultiSlitChopper.from_calibration(calibration(name=name)).to_mccode(
+            assembler, at='origin', rotate='origin')
+
+    groups = {c.name: c.group for c in assembler.instrument.components
+              if 'slit' in c.name}
+    assert set(groups.values()) == {'first_group', 'second_group'}
+    assert groups['first_slit_0'] != groups['second_slit_0']
+
+
 def test_the_disc_has_one_speed_and_one_phase(assembled):
     """One physical disc, so one pair of run-time parameters -- not one per opening."""
     assert sorted(p.name for p in assembled.parameters) == ['packphase', 'packspeed']

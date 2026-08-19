@@ -51,8 +51,8 @@ fixed numbers.
 `DiscChopper` declares `{name}speed` and `{name}phase` as instrument parameters, and
 accepts a single opening only. A disc whose openings are neither identical nor evenly
 spaced is a `MultiSlitChopper`: it emits one `DiskChopper` per opening, sharing one
-speed and phase, and tags them so `niess.nexus` rebuilds them as a single
-`NXdisk_chopper`. Its geometry follows that NeXus class: angles positive
+speed and phase, places them in one McStas `GROUP` so a neutron passes if it clears any
+opening, and tags them so `niess.nexus` rebuilds them as a single `NXdisk_chopper`. Its geometry follows that NeXus class: angles positive
 counter-clockwise facing +z, slit edges positive and increasing from the disc's
 top-dead-centre mark, and a final edge beyond 360 where the last opening straddles the
 mark. See

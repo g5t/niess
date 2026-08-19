@@ -197,7 +197,19 @@ number, so the pairs stay ordered and each width is just the difference:
 ```
 
 Three McStas components come out, sharing one `packspeed` and one `packphase` — one
-physical disc, so one pair of run-time knobs. Each carries its own width, and its own
+physical disc, so one pair of run-time knobs — and all three in a single McStas
+`GROUP`, named after the disc.
+
+!!! warning "Alternatives, not a series"
+
+    The `GROUP` is what makes the emission correct. A `DiskChopper` absorbs whatever
+    misses its slit, so three ungrouped choppers in a row would demand a neutron be
+    inside all three openings at once and transmit essentially nothing. Grouped, they
+    are tried in turn and the neutron passes if it clears any one of them.
+
+    Any composite that emits alternatives rather than a sequence needs the same:
+    `instance.GROUP(name)`, with a name derived from the object's own — instance names
+    are unique within an instrument, so a name-derived group is unique too. Each carries its own width, and its own
 `phase` offset: McStas turns a disc by `phase` to bring an opening to the beam, so an
 opening centred at 20 degrees from the mark, with the beam at 90, needs 70 degrees of
 rotation. The opening straddling the mark is centred at 360 and needs 90.
