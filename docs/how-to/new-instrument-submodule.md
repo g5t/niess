@@ -124,13 +124,50 @@ If nothing in [the component reference](../reference/components.md) fits, a new
 Optionally `__mccode_role__()` and `__mccode_extra__()`, which record what the thing is
 in the provenance metadata that the CAD and NeXus adapters dispatch on.
 
-Three worked patterns in the existing library, in increasing order of involvement:
+### Contributing to the instrument around it
 
-- `niess/components/aperture.py::Jaw` — overrides `to_mccode` to declare run-time
-  parameters before delegating to `super()`.
+`__mccode__` says what the component *is* — one `COMPONENT` line and its parameters.
+Real components often need more than that from the instrument they sit in: a knob the
+operator can turn, a value worth computing once at start-up, a lookup table, a flag that
+later components read.
+
+Overriding `to_mccode` is the supported way to add those. Do the work, then delegate:
+
+```python
+--8<-- "component_to_mccode.py:component"
+```
+
+The helpers, and what each one writes into the generated instrument:
+
+| call | lands in | use it for |
+| --- | --- | --- |
+| `ensure_runtime_line(a, 'name/"unit" = default')` | `DEFINE INSTRUMENT(...)` | a knob settable at run time |
+| `ensure_runtime_parameter(a, parameter)` | `DEFINE INSTRUMENT(...)` | the same, from an `InstrumentParameter` you already hold |
+| `a.declare('double name;')` | `DECLARE` | an internal variable with instrument scope |
+| `a.initialize('name = ...;')` | `INITIALIZE` | computing that variable once, before the first neutron |
+| `a.declare_array('double', name, values)` | `DECLARE` | a lookup table too large to inline |
+| `ensure_user_var(a, 'int', name, description)` | `USERVARS` | a per-particle flag later components read |
+| `ensure_registry(a, 'owner/repo@version')` | the component search path | a `.comp` McStas does not ship |
+| `a.metadata(name, mimetype, value)` | a `METADATA` block | information for a downstream consumer, such as a stream configuration |
+
+All of the `ensure_*` helpers are idempotent by name: two instances of the same class
+can each ask for the same user variable or registry, and the second is a no-op. An
+*inconsistent* repeat — the same parameter name with a different default or unit —
+raises rather than silently picking one.
+
+Anything derived from the component's own calibration should be computed in Python and
+emitted as a literal. Reserve `DECLARE`/`INITIALIZE` for values that depend on a
+run-time parameter, as `gate_window` does above, since those genuinely cannot be known
+until the instrument runs.
+
+Three worked patterns in the shipped library, in increasing order of involvement:
+
+- `niess/components/aperture.py::Jaw` — declares two run-time parameters, then delegates.
 - `niess/components/chopper.py::DiscChopper` — the same, plus the `offset` convention
   for a component whose centre is off the beam axis.
-- `niess/components/monitors.py::FrameMonitor` — declares an external component
+- `niess/components/guide.py::EllipticGuide` — emits its per-segment m-values as
+  `DECLARE`d arrays when the guide is segmented.
+- `niess/components/monitors.py::FrameMonitor` — pulls in an external component
   registry and attaches stream metadata.
 
 ## Composites: when one object is several components
