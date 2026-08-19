@@ -14,11 +14,11 @@ separate, human step.
 | `mccode/orientation.py` — `NXPart`, `NXParts`, `NXOrient` | `orientation.py` | Same algebra, emitting transformation dicts instead of `NXfield`s |
 | `mccode/instr.py` — `make_transformations`, `resolve_target`, `build_graph`, `inputs`/`outputs`, `guess_origin`, `to_nx` | `instrument.py::NexusContext` | `guess_origin` → `_find_origin`; `to_nx` → the `mcstas` dataset |
 | `mccode/instr.py::expr2nx` | `expression.py::resolve` + `parameter_node` | Split into "decide" and "build"; returns a typed result rather than four unrelated shapes |
-| `mccode/instance.py` — two-tier dispatch, `register_translator` | `registry.py` over `niess.dispatch.NiessRegistry` | Now three tiers (niess source type → niess role → McCode type); shared with `niess.brep` |
+| `mccode/instance.py` — two-tier dispatch, `register_translator` | `registry.py` over `niess.dispatch.NiessRegistry` | Now three tiers (niess source type → niess role → McCode type); shared with `niess.brep`. Where `register_translator` mutated one global table, a registry may instead *extend* another via `parent=`, so instrument-specific translators are chosen per conversion with `to_nexus_structure(registry=...)` rather than by whatever the process imported |
 | `mccode/instance.py` — `COMPONENT_*_TO_NEXUS`, `get_nx_type` | `instrument.py` — same maps, `default_nx_class` | |
 | `mccode/instance.py` — `NEXUS_TO_COMPONENT` | `instrument.py::NEXUS_CLASS_PARAMETERS` + `fallback_body` | Only `NXfermi_chopper` ever populated anything; the other three entries mapped to `{}` |
 | `mccode/comp.py` — `slit`, `guide`, `collimator_linear`, `diskchopper`, `elliptic_guide_gravity`, `monitor` translators | `translators.py` | |
-| `additions.py` — `monochromator_rowland_translator`, `detector_tubes_offsets_and_one_cylinder`, `bifrost_detector_collector`, `Frame_monitor`, pixel/`WHEN` helpers, `ESS_butterfly` mapping | `bifrost.py` | |
+| `additions.py` — `monochromator_rowland_translator`, `detector_tubes_offsets_and_one_cylinder`, `bifrost_detector_collector`, `Frame_monitor`, pixel/`WHEN` helpers | `bifrost.py`, on its own `BIFROST_REGISTRY` | The `ESS_butterfly` → `NXmoderator` mapping went to the generic table in `instrument.py` instead: `niess.components.source.ESSource` emits it for every instrument, not just BIFROST |
 | `utils.py` — `ess_flatbuffer_specifier`, `ev44_event_data_group`, `link_specifier`, `nxlog_data_links`, `linked_nxlog` | `streams.py` | Minus `NotNXdict` |
 | `utils.py::outer_transform_dependency` | `instrument.py` | Reads `depends_on` from node attributes |
 | `writer.py::convert_types` | `nodes.py::convert_type` | Minus the `NXattr`/`NXfield` branches |

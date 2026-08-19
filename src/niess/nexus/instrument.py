@@ -42,6 +42,10 @@ COMPONENT_TYPE_NAME_TO_NEXUS = {
     'Filter_gen': 'NXfilter',
     'Filter_graphite': 'NXfilter',
     'Elliptic_guide_gravity': 'NXguide',
+    # The ESS moderator, emitted by niess.components.source.ESSource for any
+    # instrument. McCode files it under the 'mcstas-comps' category rather than
+    # 'sources', so the category fallback below never catches it.
+    'ESS_butterfly': 'NXmoderator',
     'Mirror': 'NXmirror',
     'Monochromator_flat': 'NXmonochromator',
     'Monochromator_curved': 'NXmonochromator',
@@ -471,7 +475,10 @@ def to_nexus_structure(
     absolute_depends_on:
         Rewrite relative ``depends_on`` values as absolute NeXus paths.
     registry:
-        Translator registry; defaults to :data:`DEFAULT_NEXUS_REGISTRY`.
+        Translator registry; defaults to :data:`DEFAULT_NEXUS_REGISTRY`, which holds
+        only the generic per-component-type translators. Pass an instrument-specific
+        registry -- ``niess.nexus.bifrost.BIFROST_REGISTRY``, say -- to add its
+        translators to this conversion alone.
     """
     context = NexusContext(
         instr,

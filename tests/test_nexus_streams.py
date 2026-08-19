@@ -130,8 +130,9 @@ def test_monitor_metadata_becomes_a_da00_stream(structure_with_metadata):
 
 def test_bifrost_detector_defaults_to_ev44():
     """The BIFROST tubes keep event streaming when the instrument says nothing."""
-    from niess.nexus.bifrost import BIFROST_DETECTOR_TOPIC, detector_tubes_translator
-    from niess.nexus.registry import DEFAULT_NEXUS_REGISTRY
+    from niess.nexus.bifrost import (
+        BIFROST_DETECTOR_TOPIC, BIFROST_REGISTRY, detector_tubes_translator,
+    )
     from niess.nexus.streams import resolve_stream
 
     class DetectorTubes:
@@ -141,7 +142,31 @@ def test_bifrost_detector_defaults_to_ev44():
         def collect_metadata():
             return []
 
-    assert DEFAULT_NEXUS_REGISTRY.resolve_builder(DetectorTubes()) is detector_tubes_translator
+    assert BIFROST_REGISTRY.resolve_builder(DetectorTubes()) is detector_tubes_translator
 
     default = {'module': 'ev44', 'source': 'arc=0;triplet=0', 'topic': BIFROST_DETECTOR_TOPIC}
     assert stream_module(resolve_stream(FakeTranslation(), default=default)) == 'ev44'
+
+
+def test_ess_moderator_is_classified_without_instrument_specific_translators():
+    """ESSource emits ESS_butterfly for every instrument, not only BIFROST.
+
+    McCode files it under the 'mcstas-comps' category rather than 'sources', so the
+    category fallback does not catch it and it needs an explicit entry in the generic
+    table. Keeping that entry in niess.nexus.bifrost -- which an instrument now has to
+    import deliberately -- silently downgraded every other ESS instrument's moderator
+    to NXcoordinate_system.
+    """
+    from mccode_antlr.loader import parse_mcstas_instr
+    from niess.nexus import to_nexus_structure
+
+    src = """DEFINE INSTRUMENT moderator_test(dummy=0)
+TRACE
+COMPONENT origin = Arm() AT (0, 0, 0) ABSOLUTE
+COMPONENT source = ESS_butterfly(sector="W", beamline=2, Lmin=0.1, Lmax=10) AT (0, 0, 0) RELATIVE origin
+COMPONENT sample = Arm() AT (0, 0, 10) RELATIVE origin
+END
+"""
+    structure = to_nexus_structure(parse_mcstas_instr(src), origin='sample')
+    moderator = find_child(structure['children'][0]['children'][0], 'source')
+    assert get_attribute(moderator, 'NX_class') == 'NXmoderator'

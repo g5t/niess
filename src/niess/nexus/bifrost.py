@@ -19,18 +19,28 @@ from __future__ import annotations
 import logging
 import re
 
-from .instrument import COMPONENT_TYPE_NAME_TO_NEXUS, component_body
+from .instrument import component_body
 from .nodes import dataset, group
 from .off import NXoff
-from .registry import DEFAULT_NEXUS_REGISTRY
+from .registry import DEFAULT_NEXUS_REGISTRY, NiessNexusRegistry
 from .streams import resolve_stream
 
 logger = logging.getLogger(__name__)
 
 BIFROST_DETECTOR_TOPIC = 'bifrost_detector'
 
-# ESS_butterfly is the ESS moderator; McCode does not categorise it as a source.
-COMPONENT_TYPE_NAME_TO_NEXUS.setdefault('ESS_butterfly', 'NXmoderator')
+#: The default translators plus the BIFROST-specific ones below. Pass it explicitly
+#: to convert a BIFROST instrument::
+#:
+#:     from niess.nexus import to_nexus_structure
+#:     from niess.nexus.bifrost import BIFROST_REGISTRY
+#:     to_nexus_structure(instr, origin='sample_origin', registry=BIFROST_REGISTRY)
+#:
+#: Registering here rather than on DEFAULT_NEXUS_REGISTRY keeps the choice scoped to
+#: the conversion that asks for it. Were these on the shared default, merely importing
+#: this module would give any *other* instrument's Detector_tubes BIFROST's ICD pixel
+#: numbering and detector topic -- and niess.cspec builds Detector_tubes too.
+BIFROST_REGISTRY = NiessNexusRegistry(parent=DEFAULT_NEXUS_REGISTRY)
 
 # BIFROST_nxs writes its triplet placement as "WHEN (c == secondary_cassette && a == analyzer)"
 _WHEN_RE = re.compile(
@@ -56,7 +66,7 @@ def bifrost_detector_source(arc, triplet) -> str:
     return f'arc={arc};triplet={triplet}'
 
 
-@DEFAULT_NEXUS_REGISTRY.register_component_type('Monochromator_Rowland')
+@BIFROST_REGISTRY.register_component_type('Monochromator_Rowland')
 def monochromator_rowland_translator(t):
     """A Rowland-geometry analyzer, as a segmented NXcrystal."""
     half_height = t.parameter('yheight', dtype=float, default=0.0) / 2
@@ -101,7 +111,7 @@ def monochromator_rowland_translator(t):
     return component_body('NXcrystal', children)
 
 
-@DEFAULT_NEXUS_REGISTRY.register_component_type('Detector_tubes', 'Detector_time_tubes')
+@BIFROST_REGISTRY.register_component_type('Detector_tubes', 'Detector_time_tubes')
 def detector_tubes_translator(t):
     """A triplet of He3 tubes: one shared cylinder, repositioned per pixel."""
     import numpy as np
@@ -174,7 +184,7 @@ def detector_tubes_translator(t):
     return component_body('NXdetector', children)
 
 
-@DEFAULT_NEXUS_REGISTRY.register_component_type('Frame_monitor')
+@BIFROST_REGISTRY.register_component_type('Frame_monitor')
 def frame_monitor_translator(t):
     """A frame monitor: same shape as any other monitor, same stream resolution.
 

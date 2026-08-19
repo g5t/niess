@@ -45,9 +45,10 @@ def golden():
 def converted():
     from mccode_antlr.io.json import from_json
     from niess.nexus import to_nexus_structure
+    from niess.nexus.bifrost import BIFROST_REGISTRY
 
     instr = from_json(gzip.decompress(INSTR.read_bytes()))
-    return to_nexus_structure(instr, origin='sample_origin')
+    return to_nexus_structure(instr, origin='sample_origin', registry=BIFROST_REGISTRY)
 
 
 def instrument_children(structure):

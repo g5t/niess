@@ -25,9 +25,17 @@ B = TypeVar('B', bound=Callable[..., Any])
 
 
 class NiessRegistry(Generic[B]):
-    """Three-tier builder lookup keyed on provenance metadata or component type."""
+    """Three-tier builder lookup keyed on provenance metadata or component type.
 
-    def __init__(self) -> None:
+    A registry may extend another by naming it as ``parent``: lookups that find
+    nothing locally fall through to the parent's own three tiers. That is how an
+    instrument-specific registry adds its translators without touching the shared
+    default one, so which translators apply is a property of a single conversion
+    rather than of whatever the process happened to import.
+    """
+
+    def __init__(self, parent: 'NiessRegistry[B] | None' = None) -> None:
+        self.parent = parent
         self._source_type_builders: dict[str, B] = {}
         self._role_builders: dict[str, B] = {}
         self._component_type_builders: dict[str, B] = {}
@@ -62,11 +70,20 @@ class NiessRegistry(Generic[B]):
     def resolve_builder(self, instance) -> B | None:
         """Return the builder for ``instance``, or ``None`` if none is registered.
 
+        This registry's own three tiers are tried first, in full, before any parent
+        is consulted: the more specific registry wins outright.
+
         ``None`` means *unhandled* -- it never means "handled, emit nothing".
         Callers that need that distinction must invoke the returned builder
         themselves and interpret its return value.
         """
         provenance = NiessProvenance.from_instance(instance)
+        builder = self._resolve_local(instance, provenance)
+        if builder is not None:
+            return builder
+        return None if self.parent is None else self.parent.resolve_builder(instance)
+
+    def _resolve_local(self, instance, provenance) -> B | None:
         if provenance is not None:
             if provenance.source_type in self._source_type_builders:
                 return self._source_type_builders[provenance.source_type]
@@ -76,7 +93,9 @@ class NiessRegistry(Generic[B]):
         return self._component_type_builders.get(component_type_name(instance))
 
     def registered_component_types(self) -> frozenset[str]:
-        return frozenset(self._component_type_builders)
+        """Component-type names this registry handles, inherited ones included."""
+        inherited = frozenset() if self.parent is None else self.parent.registered_component_types()
+        return frozenset(self._component_type_builders) | inherited
 
 
 def component_type_name(instance) -> str:
