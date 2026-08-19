@@ -56,10 +56,14 @@ itself: `Guides` has no `_flat`, so it becomes an included sub-instrument called
 Every dimensional quantity is a scipp `Variable` with the unit the drawing uses.
 Nothing converts to metres here; that happens once, in `__mccode__`.
 
-Positions chain. Each section builder takes the position and orientation of what came
-before, places its own components relative to that with
-`niess.spatial.at_relative`, and returns the reference for what comes
-next — the direct analogue of `AT (0, 0, d) RELATIVE previous`:
+A component's `position` and `orientation` are its placement in the instrument
+coordinate system. How you arrive at them is up to you.
+
+`niess.bifrost` chains them, because that is how its geometry is specified: each
+element so far past the one before it. Each section builder takes the position and
+orientation of what came before, places its own components relative to that with
+`niess.spatial.at_relative`, and returns the reference for what comes next — the direct
+analogue of `AT (0, 0, d) RELATIVE previous`:
 
 ```python
 --8<-- "src/niess/teaching/parameters.py:chain"
@@ -67,6 +71,22 @@ next — the direct analogue of `AT (0, 0, d) RELATIVE previous`:
 
 Because the chain is computed rather than typed, moving the guide moves everything
 downstream of it and no number is written twice.
+
+!!! tip "Chaining is a convenience, not a requirement"
+
+    If you already know where things are — from a survey, a CAD model, or an existing
+    instrument definition — put those coordinates in the calibration directly and skip
+    `at_relative` entirely:
+
+    ```python
+    --8<-- "direct_positions.py:direct"
+    ```
+
+    That produces the same instrument as the chained calibration, to the last bit.
+    Chain when the geometry is genuinely specified as a chain of offsets, so that
+    moving one element carries the rest with it; write coordinates out when they are
+    known independently and a chain would only obscure them. The two styles can be
+    mixed within one instrument.
 
 Three quantities in the teaching instrument are *run-time* values rather than
 constants, and each gets there differently:

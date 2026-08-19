@@ -137,9 +137,13 @@ class Component(Base, kw_only=True):
         at_rel = 'ABSOLUTE' if at is None else at
         rot_rel = 'ABSOLUTE' if rotate is None else rotate
 
+        # `+` rather than `+=`: scipp adds in place, and `self.position` is the very
+        # Variable the calibration dictionary holds, so `+=` would shift both this
+        # component and the calibration it came from -- accumulating another offset
+        # on every subsequent build from the same data.
         at = self.position
         if hasattr(self, 'offset'):
-            at += getattr(self, 'offset')
+            at = at + getattr(self, 'offset')
         at = (at.to(unit='m').value, at_rel)
         rot = (mccode_ordered_angles(self.orientation), rot_rel)
 

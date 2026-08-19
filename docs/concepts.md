@@ -44,10 +44,12 @@ the section field names — matched by name, so their order is free:
 Primary.from_calibration(teaching_parameters())
 ```
 
-Positions inside those dictionaries are *chained* with `at_relative`, each element
-placed against the one before it, which is what a McStas `AT (0, 0, d) RELATIVE
-previous` line does — except computed once rather than typed repeatedly. Move something
-upstream and everything downstream follows.
+A component's position and orientation are its placement in the instrument coordinate
+system. Where the geometry is specified as a chain of offsets — as BIFROST's is —
+`at_relative` places each element against the one before it, which is what a McStas
+`AT (0, 0, d) RELATIVE previous` line does, except computed once rather than typed
+repeatedly, so moving something upstream carries everything downstream with it. Where
+the coordinates are known independently, write them directly; nothing requires a chain.
 
 `@calibration` lets `from_calibration` accept either one dictionary or keyword
 arguments, and `variant_parameters` selects between design variants of a repeated unit.
