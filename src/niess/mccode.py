@@ -8,10 +8,10 @@ from mccode_antlr.common import InstrumentParameter
 from mccode_antlr.instr import Instance
 
 
-NIESS_BREP_METADATA_NAMESPACE = 'niess.brep'
-NIESS_BREP_METADATA_NAME = 'niess_brep'
-NIESS_BREP_METADATA_MIMETYPE = 'application/json'
-NIESS_BREP_METADATA_SCHEMA_VERSION = 1
+NIESS_PROVENANCE_METADATA_NAMESPACE = 'niess.provenance'
+NIESS_PROVENANCE_METADATA_NAME = 'niess_provenance'
+NIESS_PROVENANCE_METADATA_MIMETYPE = 'application/json'
+NIESS_PROVENANCE_METADATA_SCHEMA_VERSION = 1
 
 
 def ensure_user_var(a: Assembler, dtype: str, name: str, description: str):
@@ -57,15 +57,34 @@ def ensure_runtime_parameter(a: Assembler, par: InstrumentParameter):
     default, type, or units will raise an error.
     """
     held = a.instrument.get_parameter(par.name)
-    if held := a.instrument.get_parameter(par.name) and held != par:
+    if held is None:
+        a.instrument.add_parameter(par)
+        return
+    if held != par:
         msg = f"Parameter {par.name} already defined"
         if held.value is not None:
             msg += f" with value {held.value}"
         if held.unit is not None:
             msg += f" {held.unit}"
         raise RuntimeError(msg)
-    else:
-        a.instrument.add_parameter(par)
+
+
+def root_assembler(a: Assembler) -> Assembler:
+    """The outermost Assembler of a (possibly nested) assembly.
+
+    ``Assembler.included()`` builds a section as a child assembler whose own name is
+    the section's, so anything naming itself after ``assembler.name`` inside a section
+    picks up the section name rather than the instrument's. Walk to the root when the
+    instrument as a whole is what is meant.
+    """
+    while getattr(a, 'parent', None) is not None:
+        a = a.parent
+    return a
+
+
+def instrument_name(a: Assembler) -> str:
+    """The name of the instrument being assembled, from anywhere in the hierarchy."""
+    return root_assembler(a).name
 
 
 def ensure_registry(a: Assembler, specification: str):
@@ -107,8 +126,8 @@ def niess_metadata_payload(
         extra: dict[str, Any] | None = None,
 ):
     return {
-        'namespace': NIESS_BREP_METADATA_NAMESPACE,
-        'schema_version': NIESS_BREP_METADATA_SCHEMA_VERSION,
+        'namespace': NIESS_PROVENANCE_METADATA_NAMESPACE,
+        'schema_version': NIESS_PROVENANCE_METADATA_SCHEMA_VERSION,
         'source_type': source_type,
         'source_name': source_name,
         'role': role,
@@ -142,8 +161,8 @@ def add_niess_metadata(
     )
     metadata = MetaData.from_instance_tokens(
         instance.name,
-        NIESS_BREP_METADATA_MIMETYPE,
-        NIESS_BREP_METADATA_NAME,
+        NIESS_PROVENANCE_METADATA_MIMETYPE,
+        NIESS_PROVENANCE_METADATA_NAME,
         dumps(payload, separators=(',', ':')),
     )
     instance.add_metadata(metadata)
@@ -152,10 +171,10 @@ def add_niess_metadata(
 
 def read_niess_metadata(instance: Instance):
     for metadata in reversed(instance.collect_metadata()):
-        if metadata.name != NIESS_BREP_METADATA_NAME:
+        if metadata.name != NIESS_PROVENANCE_METADATA_NAME:
             continue
         payload = loads(metadata.value)
-        if payload.get('namespace') != NIESS_BREP_METADATA_NAMESPACE:
+        if payload.get('namespace') != NIESS_PROVENANCE_METADATA_NAMESPACE:
             continue
         return payload
     return None

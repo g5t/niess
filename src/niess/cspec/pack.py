@@ -91,6 +91,7 @@ class Pack:
             group: str | None = None,
             **kwargs
     ):
+        from niess.mccode import add_niess_metadata
         if component is None:
             component = 'Detector_tubes'
         params = self.mcstas_parameters()
@@ -99,6 +100,7 @@ class Pack:
         #     2-D histogram directly
         params.update(kwargs)
         tubes = assembler.component(name, component, at=((0, 0, distance), relative), parameters=params)
+        add_niess_metadata(tubes, self, source_name=name, role='physical-component')
         if when:
             tubes.WHEN(when)
         if extend:

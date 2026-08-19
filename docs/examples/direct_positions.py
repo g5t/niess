@@ -1,0 +1,52 @@
+"""Chained positions are a convenience; absolute ones work just as well.
+
+`at_relative` exists because BIFROST's geometry is specified as a chain of offsets --
+each element so far past the one before it. When you instead know where things are,
+from a survey or a CAD model, put those coordinates in the calibration directly.
+"""
+from pathlib import Path
+
+
+def main(outdir: Path) -> None:
+    from mccode_antlr import Flavor
+    from mccode_antlr.assembler import Assembler
+    from niess.teaching import Primary, teaching_parameters
+
+    # --8<-- [start:direct]
+    from scipp import vector
+    from scipp.spatial import rotations_from_rotvecs
+
+    upright = rotations_from_rotvecs(vector([0, 0, 0.0], unit='deg'))
+
+    # Positions as surveyed, in the instrument coordinate system -- no chaining
+    calibration = teaching_parameters()
+    for name, z in (('source', 0.0), ('chopper', 6.76), ('jaw', 7.26),
+                    ('monitor', 7.46), ('sample_origin', 8.46)):
+        calibration[name]['position'] = vector([0, 0, z], unit='m')
+        calibration[name]['orientation'] = upright
+    for name, z in (('unit_1', 1.5), ('unit_2', 3.51)):
+        calibration['guides'][name]['position'] = vector([0, 0, z], unit='m')
+        calibration['guides'][name]['orientation'] = upright
+
+    assembler = Assembler('teaching', flavor=Flavor.MCSTAS)
+    Primary.from_calibration(calibration).to_mccode(assembler)
+    # --8<-- [end:direct]
+
+    # ...and it is the same instrument the chained calibration produces
+    def placements(params):
+        a = Assembler('teaching', flavor=Flavor.MCSTAS)
+        Primary.from_calibration(params).to_mccode(a)
+        return {c.name: tuple(float(str(x)) for x in c.at_relative[0])
+                for c in a.instrument.components}
+
+    chained, direct = placements(teaching_parameters()), placements(calibration)
+    assert list(chained) == list(direct)
+    # Chaining accumulates floating-point error the surveyed numbers do not have, so
+    # compare the coordinates rather than their text
+    worst = max(abs(a - b) for name in chained
+                for a, b in zip(chained[name], direct[name]))
+    assert worst < 1e-12, worst
+
+
+if __name__ == '__main__':
+    main(Path('.'))

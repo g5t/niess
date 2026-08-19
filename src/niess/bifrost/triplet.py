@@ -181,7 +181,7 @@ class Triplet(Base):
     def to_mccode(self, assembler: Assembler, relative: str, distance: float, name: str,
                   when: str = None, extend: str = None, add_metadata: bool = False,
                   component: str = None, parameters: dict = None):
-        from niess.mccode import ensure_registry
+        from niess.mccode import add_niess_metadata, ensure_registry
         if component is None:
             component = 'Detector_tubes'
         if component in ('Detector_tubes', 'Detector_time_tubes'):
@@ -202,6 +202,7 @@ class Triplet(Base):
         tubes = assembler.component(name, component, at=((0, 0, distance), relative), parameters=base_parameters)
         tubes.WHEN(when)
         tubes.EXTEND(extend)
+        add_niess_metadata(tubes, self, source_name=name, role='physical-component')
 
     def efu_calibration(self, group: int = -1) -> EFUTripletConfig:
         # The charge division space is subdivided by the Event Formation Unit into

@@ -12,17 +12,28 @@ from ..utilities import calibration
 class Section(msgspec.Struct, tag=True):
 
     @classmethod
+    def _component_fields(cls):
+        """The fields which are components of this Section.
+
+        Underscore-prefixed fields are per-class extras -- ``_flat`` controls how the
+        section inserts itself into an Assembler, and a subclass may add others -- so
+        they are deliberately invisible to every introspection method here. Filtering
+        in one place keeps the name, type and item views consistent with each other
+        however many there are, and wherever they are declared.
+        """
+        return [fi for fi in fields(cls) if not fi.name.startswith('_')]
+
+    @classmethod
     @lru_cache(maxsize=None)
     def parts(cls):
         """Get the ordered list of components which make up this Section"""
-        # Exclude names which start with underscores
-        return [fi.name for fi in fields(cls) if not fi.name.startswith('_')]
+        return [fi.name for fi in cls._component_fields()]
 
     @classmethod
     @lru_cache(maxsize=None)
     def types(cls):
         """Get the ordered list of component types which make up this Section"""
-        return [fi.type for fi in fields(cls)]
+        return [fi.type for fi in cls._component_fields()]
 
     @classmethod
     @lru_cache(maxsize=None)
@@ -33,7 +44,7 @@ class Section(msgspec.Struct, tag=True):
     @classmethod
     @lru_cache(maxsize=None)
     def field_types(cls):
-        return {fi.name: fi.type for fi in fields(cls)}
+        return {fi.name: fi.type for fi in cls._component_fields()}
 
     def to_mccode_flat(self, assembler: Assembler, *args, **kwargs):
         """

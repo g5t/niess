@@ -173,6 +173,10 @@ cython_debug/
 
 *.instr
 *.json
+
+# ...but the documentation's worked examples and fixtures are source, not output
+!docs/examples/*.instr
+!docs/examples/*.json
 *.xml
 *.ipynb
 

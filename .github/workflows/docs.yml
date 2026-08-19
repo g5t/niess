@@ -1,0 +1,59 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/configure-pages@v6
+
+      - name: Install niess and the documentation toolchain
+        run: pip install -e ".[docs,test]"
+
+      # The site's examples are executable modules asserting their own claims. Running
+      # them here as well as in the test job means broken documentation fails the job
+      # that publishes documentation, not only the one that runs tests.
+      - name: Verify the examples
+        run: pytest tests/test_docs_examples.py -q
+
+      # --strict turns link and reference warnings into a non-zero exit
+      - name: Build the site
+        run: zensical build --clean --strict
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    # Pull requests and feature branches build only; the artifact on the run summary is
+    # the preview. Publishing happens from main.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v5
+        id: deployment

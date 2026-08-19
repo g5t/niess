@@ -91,12 +91,12 @@ class NCrystalFilter(Filter):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         """Overload to ensure the registry we need is present"""
         from niess.mccode import ensure_registry
         ensure_registry(assembler, 'mcdotstar/mcstas-radial-filter-collimator@main')
-        comp = super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        comp = super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
         return comp
 
 
@@ -119,12 +119,12 @@ class Attenuator(NCrystalFilter):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         from mccode_antlr.common import InstrumentParameter, Expr
         parameter = InstrumentParameter.parse(f"int {self.name}_in = 0")
         assembler.instrument.add_parameter(parameter, ignore_repeated=True)
-        comp = super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        comp = super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
         comp.WHEN(Expr.parameter(parameter.name))
         return comp
 
@@ -196,12 +196,12 @@ class RadialFilterCollimator(Filter):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
     ):
         """Overload to ensure the registry we need is present"""
         from niess.mccode import ensure_registry
         ensure_registry(assembler, 'mcdotstar/mcstas-radial-filter-collimator@main')
-        comp = super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
+        comp = super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
         return comp
 
 

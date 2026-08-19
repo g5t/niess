@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any
 from dataclasses import dataclass
 
-from niess.mccode import read_niess_metadata
+from .mccode import read_niess_metadata
 
 
 @dataclass(frozen=True)

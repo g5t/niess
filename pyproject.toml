@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "niess"
 dynamic = ["version"]
-description = ''
+description = "Neutron instruments of the European Spallation Source as calibrated Python objects, emitting McStas instruments and ESS NeXus Structure JSON"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "BSD-3-Clause"
@@ -35,11 +35,20 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ['pytest']
+# Zensical is pre-1.0 and ships weekly; pin exactly and bump deliberately.
+docs = [
+  'zensical==0.0.56',
+  'mkdocstrings-python>=2.0',
+]
+
+[project.scripts]
+instr2ns = "niess.nexus.cli:convert"
 
 [project.urls]
-Documentation = "https://github.com/g5t/niess#readme"
-Issues = "https://github.com/g5t/niess/issues"
-Source = "https://github.com/g5t/niess"
+Documentation = "https://mcdotstar.github.io/niess/"
+Issues = "https://github.com/mcdotstar/niess/issues"
+Source = "https://github.com/mcdotstar/niess"
+Changelog = "https://github.com/mcdotstar/niess/releases"
 
 [tool.hatch.version]
 path = "src/niess/__about__.py"
@@ -47,6 +56,14 @@ path = "src/niess/__about__.py"
 [tool.hatch.envs.default]
 type = "virtual"
 path = ".venv"
+
+[tool.hatch.envs.docs]
+features = ["docs", "test"]
+
+[tool.hatch.envs.docs.scripts]
+build = "zensical build --clean --strict"
+serve = "zensical serve"
+check = "pytest tests/test_docs_examples.py -q"
 
 [tool.hatch.envs.types]
 extra-dependencies = [

@@ -7,11 +7,11 @@ from .analyzer import Analyzer
 from .primary import Primary
 
 __all__ = [
-    Arm,
-    Tank,
-    BIFROST,
-    Channel,
-    Triplet,
-    Analyzer,
-    Primary,
+    'Arm',
+    'Tank',
+    'BIFROST',
+    'Channel',
+    'Triplet',
+    'Analyzer',
+    'Primary',
 ]

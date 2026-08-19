@@ -9,18 +9,25 @@ def nexus_structure_metadata(topic: str, source: str, *, variables, constants):
     from json import dumps
     from mccode_antlr.common import MetaData
     from mccode_to_kafka.writer import da00_dataarray_config
-    # TODO update eniius.utils.mccode_component_eniius_data to use ('*', 'application/json') instead of
-    #      only ('eniius_data', 'json')
-    # The correct JSON to encode is a dictionary with a single key, 'data', which itself is a dictionary with
-    # the keys 'type' and 'value'. The value of 'type' is 'dict' and the value of 'value' is the actual NeXus structure.
-    # This is very hacky and is (currently) necessary to escape parsing within eniius.
 
     struct = da00_dataarray_config(topic, source=source, variables=variables, constants=constants)
 
     return MetaData.from_instance_tokens(topic, 'application/json', 'nexus_structure_stream_data', dumps(struct))
 
 
-def add_monitor_metadata(instr_name: str, inst: Instance, n):
+def beam_monitor_topic(instrument: str) -> str:
+    """The default Kafka topic carrying an instrument's beam-monitor histograms."""
+    return f'{instrument.lower()}_beam_monitor'
+
+
+def add_monitor_metadata(instr_name: str, inst: Instance, n, topic: str | None = None):
+    """Attach a da00 histogram-stream configuration to a monitor instance.
+
+    ``instr_name`` must be the *instrument* name -- use
+    :func:`niess.mccode.instrument_name`, not ``assembler.name``, which inside a
+    nested section is the section's name. ``topic`` overrides the derived default
+    outright, for instruments that publish somewhere else entirely.
+    """
     from mccode_to_kafka.writer import da00_variable_config
     axes = {
         'signal': {'unit': 'counts', 'label': f'{inst.name} counts', 'shape': [n]},
@@ -34,7 +41,7 @@ def add_monitor_metadata(instr_name: str, inst: Instance, n):
     }
     variables = [configs['signal'], configs['errors']]
     constants = [configs['t']]
-    topic = f'{instr_name.lower()}_beam_monitor'
+    topic = beam_monitor_topic(instr_name) if topic is None else topic
     source = inst.name  # 'cbm1', 'cbm2', etc. in the real instrument, for now
     metadata = nexus_structure_metadata(
         topic=topic, source=source, variables=variables, constants=constants
@@ -51,14 +58,49 @@ class FrameMonitor(Component):
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_brep_metadata: bool = False,
+            insert_provenance_metadata: bool = True,
+            nexus_stream: dict | None = None,
+            topic: str | None = None,
     ):
-        from niess.mccode import ensure_registry
+        """Add this monitor to an instrument.
+
+        ``nexus_stream`` chooses how the monitor's data reaches NeXus, e.g.
+        ``{'module': 'ev44', 'topic': ..., 'source': ...}``. Which protocol suits a
+        given monitor is a property of the instrument setup, so the choice is made
+        here, by whoever builds the instrument, and recorded in the provenance
+        metadata for :mod:`niess.nexus` to read back. Left unset, the monitor keeps
+        its da00 histogram stream.
+
+        ``topic`` overrides the Kafka topic that stream is published on. It defaults
+        to ``{instrument}_beam_monitor``, taken from the name of the *root* assembler
+        -- naming that assembler is how a different instrument gets a different topic.
+        """
+        from niess.mccode import add_niess_metadata, ensure_registry, instrument_name
         ensure_registry(assembler, 'mcdotstar/mcstas-frame-tof-monitor@main')
 
-        inst = super().to_mccode(assembler, at, rotate, insert_brep_metadata=insert_brep_metadata)
-        # Build the NeXus Structure entry to point to the correct Kafka stream
-        return add_monitor_metadata(assembler.name, inst, self.time_bins())
+        inst = super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
+        # The instrument's name, not assembler.name: inside a nested section the
+        # latter is the section's own name, which would publish this monitor's data
+        # on a per-section topic nobody subscribes to.
+        instrument = instrument_name(assembler)
+
+        if nexus_stream is None:
+            # Default: a da00 histogram stream, described by a METADATA block
+            return add_monitor_metadata(instrument, inst, self.time_bins(), topic=topic)
+
+        if insert_provenance_metadata:
+            add_niess_metadata(
+                inst, self,
+                role=self.__mccode_role__(),
+                extra=self.__mccode_extra__() | {'nexus_stream': nexus_stream},
+            )
+        if nexus_stream.get('module') == 'da00' and 'config' not in nexus_stream:
+            # da00 wanted, but no configuration given: build the standard one
+            return add_monitor_metadata(
+                instrument, inst, self.time_bins(),
+                topic=topic or nexus_stream.get('topic'),
+            )
+        return inst
 
     def __partial__mccode__(self) -> tuple[str, dict]:
         return 'Frame_monitor', {'nt': self.time_bins(), 'frequency': 14.0}

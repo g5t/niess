@@ -1,0 +1,44 @@
+/* A small McStas instrument, written by hand.
+ *
+ * The "Translate an existing .instr" guide turns this file into niess.teaching.
+ * It is deliberately plain: no niess metadata, no generated sections.
+ */
+DEFINE INSTRUMENT teaching_hand_written(
+  chopperspeed = 14.0,
+  chopperphase = 0.0,
+  jaw_l = -0.015,
+  jaw_r = 0.015
+)
+
+TRACE
+
+COMPONENT source = ESS_butterfly(
+  sector = "W", beamline = 4, yheight = 0.03, cold_frac = 0.5,
+  Lmin = 0.75, Lmax = 5.0
+) AT (0, 0, 0) ABSOLUTE
+
+COMPONENT unit_1 = Guide_gravity(
+  l = 2.0, w1 = 0.04, h1 = 0.06, w2 = 0.04, h2 = 0.06, m = 2.0
+) AT (0, 0, 1.5) RELATIVE source
+
+COMPONENT unit_2 = Guide_gravity(
+  l = 3.0, w1 = 0.04, h1 = 0.06, w2 = 0.04, h2 = 0.06, m = 3.0
+) AT (0, 0, 2.01) RELATIVE unit_1
+
+COMPONENT chopper = DiskChopper(
+  radius = 0.35, theta_0 = 170.0, nu = chopperspeed, phase = chopperphase,
+  nslit = 1, yheight = 0.06
+) AT (0, -0.35, 3.25) RELATIVE unit_2
+
+COMPONENT jaw = Slit(
+  xmin = jaw_l, xmax = jaw_r, yheight = 0.05
+) AT (0, 0, 3.75) RELATIVE unit_2
+
+COMPONENT monitor = TOF_monitor(
+  xwidth = 0.05, yheight = 0.05, nt = 512, tmin = 0, tmax = 100000,
+  restore_neutron = 1
+) AT (0, 0, 3.95) RELATIVE unit_2
+
+COMPONENT sample_origin = Arm() AT (0, 0, 4.95) RELATIVE unit_2
+
+END
