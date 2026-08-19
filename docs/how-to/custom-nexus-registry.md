@@ -14,21 +14,32 @@ For each instance, the registry resolves a translator through three tiers, most
 specific first:
 
 ```mermaid
-flowchart LR
-    A[Instance] --> B{niess source_type?}
-    B -- registered --> T[translator]
-    B -- no --> C{niess role?}
-    C -- registered --> T
-    C -- no --> D{McStas type name?}
-    D -- registered --> T
-    D -- no --> E{parent registry?}
-    E -- yes --> B
-    E -- no --> F[fallback: guess an NX class]
+flowchart TD
+    A[Instance] --> P{"carries niess<br/>provenance?"}
+    P -- no --> D
+    P -- yes --> B{"a builder registered<br/>for its source_type?"}
+    B -- yes --> T([use that builder])
+    B -- no --> C{"a builder registered<br/>for its role?"}
+    C -- yes --> T
+    C -- no --> D{"a builder registered for its<br/>McStas component type?"}
+    D -- yes --> T
+    D -- no --> E{"does this registry<br/>have a parent?"}
+    E -- "yes: start again,<br/>on the parent" --> P
+    E -- no --> F([unhandled: the walk<br/>guesses an NX class])
 ```
+
+Each decision asks whether *this* registry has a builder registered under that key --
+not merely whether the instance has such a key. An instance whose `source_type` no one
+has registered a builder for simply falls through to the next tier.
 
 The first two tiers read the provenance metadata niess attaches when it builds a
 component, so they can distinguish two instances of the same McStas type by what niess
-thinks they are. The third works on any instrument, niess-built or not.
+thinks they are. An instance without provenance -- anything from a `.instr` niess did
+not build -- skips both and is matched on its McStas component type alone.
+
+A parent is consulted only once all three of a registry's own tiers have missed, and it
+then repeats all three itself. That is what "the more specific registry wins outright"
+means: a child's McStas-type builder beats a parent's `source_type` builder.
 
 !!! note "`None` means two different things"
 
