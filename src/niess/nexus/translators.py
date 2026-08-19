@@ -212,3 +212,51 @@ def monitor_translator(t, default_stream: dict | None = None):
     if stream is not None:
         children.append(stream)
     return component_body('NXmonitor', children)
+
+
+# Registered by niess source type rather than by McStas component type: every instance
+# a MultiSlitChopper emits is a plain DiskChopper, and only the provenance says they
+# are one disc. Naming the source type as a string keeps niess.components out of this
+# module's imports.
+@DEFAULT_NEXUS_REGISTRY.register('niess.components.chopper.MultiSlitChopper')
+def multi_slit_chopper_translator(t):
+    """Rebuild a multi-slit disc from the components it was split across.
+
+    One instance carries the whole disc; the rest emit nothing. Which is which comes
+    from the provenance role, so it does not depend on the order the instances appear
+    in the instrument.
+    """
+    from ..provenance import NiessProvenance
+
+    if t.provenance is None or t.provenance.role != 'nexus-group-primary':
+        # A slit folded into the primary instance above -- emit nothing at all
+        return None
+
+    edges = []
+    for sibling in t.siblings_in_group():
+        extra = NiessProvenance.from_instance(sibling).extra
+        edges.extend(extra['slit_edges'])
+
+    # NXdisk_chopper geometry, exactly as the component recorded it: angles measured
+    # from the top-dead-centre mark, positive counter-clockwise facing +z, with a final
+    # edge beyond 360 where the last opening straddles the mark.
+    children = [
+        dataset('slits', len(edges) // 2),
+        dataset('slit_edges', edges, dtype='double', attrs={'units': 'degrees'}),
+        t.parameter_node('rotation_speed', source='nu', dtype=float,
+                         attrs={'units': 'Hz'}),
+        dataset('radius', t.parameter('radius', dtype=float, default=0.0),
+                attrs={'units': 'm'}),
+        dataset('slit_height', t.parameter('yheight', dtype=float, default=0.0),
+                attrs={'units': 'm'}),
+    ]
+
+    extra = t.provenance.extra
+    if 'top_dead_center' in extra:
+        children.append(dataset('top_dead_center', float(extra['top_dead_center']),
+                                attrs={'units': 'degrees'}))
+    if 'beam_position' in extra:
+        children.append(dataset('beam_position', float(extra['beam_position']),
+                                attrs={'units': 'degrees'}))
+
+    return component_body('NXdisk_chopper', children)
