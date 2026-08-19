@@ -172,21 +172,66 @@ Three worked patterns in the shipped library, in increasing order of involvement
 
 ## Composites: when one object is several components
 
-A detector bank is one niess object and many McStas instances. Write a `Base` subclass
-with its own `to_mccode` that calls `assembler.component(...)` directly — and then:
+A detector bank is one niess object and many McStas instances. So is a chopper disc
+whose slits are unevenly spaced: McStas's `DiskChopper` gives you `nslit` *identical,
+evenly spaced* slits, so an irregular disc has to be emitted as one `DiskChopper` per
+slit.
+
+Write a `Base` subclass with its own `to_mccode` that calls `assembler.component(...)`
+directly, once per instance — and then tag each one:
+
+```python
+--8<-- "group_composite.py:composite"
+```
 
 !!! danger "Tag every instance you build by hand"
 
-    `Component.to_mccode` tags what it emits; hand-built instances are yours to tag:
-
-    ```python
-    add_niess_metadata(instance, self, role='physical-component')
-    ```
-
+    `Component.to_mccode` tags what it emits; hand-built instances are yours to tag.
     Forget it and nothing fails. The instance simply becomes invisible to every
     adapter — missing from the STEP assembly, missing from the NeXus file — with no
     error to notice. `tests/test_provenance_coverage.py` enforces this for niess's own
     composites.
+
+### Making the group recoverable
+
+The `extra` dictionary above is doing the real work. Splitting the disc across three
+components is a McStas implementation detail; a NeXus file wants one `NXdisk_chopper`,
+and a CAD model wants one solid. The tags say how to put it back together:
+
+| key | purpose |
+| --- | --- |
+| `nexus_group_id` | which instances belong to the same physical object |
+| `nexus_group_index` | their order within it |
+| `slit_centre`, `slit_width` | this instance's own contribution to the whole |
+
+and the `role` — `nexus-group-primary` on one instance, `nexus-group-member` on the
+rest — decides which one stands for the group.
+
+Tag by explicit role rather than relying on declaration order: an adapter reads the
+instrument as a flat list, and nothing guarantees the primary appears first.
+
+An adapter then registers against those roles. The member translator returns `None`,
+which means *emit nothing*; the primary translator rebuilds the whole object from its
+siblings:
+
+```python
+--8<-- "group_composite.py:translator"
+```
+
+Three McStas components in, one NeXus group out:
+
+```python
+--8<-- "group_composite.py:result"
+```
+
+Without that registry the same instrument still converts — as three separate
+`NXdisk_chopper` groups, which is exactly what the McStas file describes. The registry
+is what restores the physical object.
+
+`niess.brep` dispatches on `role` through the same three tiers, so one role builder
+there rebuilds the disc as a single solid for CAD from the same tags. See
+[Write NeXus translators](custom-nexus-registry.md#many-instances-one-nexus-group) for
+the mechanism in full.
 
 Two more rules for composites:
 
