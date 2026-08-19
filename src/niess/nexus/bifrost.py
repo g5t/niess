@@ -75,7 +75,8 @@ def monochromator_rowland_translator(t):
         dataset('segment_height', half_height * 2, attrs={'units': 'm'}),
         dataset('segment_gap', gap, attrs={'units': 'm'}),
         dataset('segment_columns', count),
-        t.parameter_node('segment_rows', source='NV'),
+        # Monochromator_Rowland no longer defines NV; it is a single row of NH segments
+        dataset('segment_rows', 1),
         dataset('mosaic_horizontal', mosaic_h or mosaic, attrs={'units': 'arcminutes'}),
         dataset('mosaic_vertical', mosaic_v or mosaic, attrs={'units': 'arcminutes'}),
     ]
@@ -111,12 +112,20 @@ def detector_tubes_translator(t):
     ni = t.parameter('N', dtype=int, default=1)
     nj = t.parameter('no', dtype=int, default=1)
     width = t.parameter('width', dtype=float, default=0.0)
+    # `height` is the whole tube, and the whole tube is what gets binned:
+    # Detector_tubes.comp assigns a bin with floor(no * ty) where ty is normalised
+    # over lengths[i], which is `height` when `ends` is undefined. Its `dead_length`
+    # parameter tapers detection probability towards the tube ends (p *= end_steps)
+    # without narrowing the bin grid, so no active-length correction belongs here.
     height = t.parameter('height', dtype=float, default=0.0)
     radius = t.parameter('radius', dtype=float, default=0.0)
 
     half_i = (width - 2 * radius) / 2
     di = np.linspace(-half_i, half_i, ni)
-    half_pixel = height / (nj + 1) / 2
+    # nj bins of length height/nj tile the tube, so bin k is centred at
+    # -height/2 + (k + 1/2) * height/nj -- matching floor(no * ty) exactly.
+    # (height/(nj+1) would be counting the nj+1 bin *edges* as if they were pixels.)
+    half_pixel = height / nj / 2
     # Signs verified against plots of the resulting detector positions
     dj = -np.linspace(-height / 2 + half_pixel, height / 2 - half_pixel, nj)
     grid_j, grid_i = np.meshgrid(dj, di)

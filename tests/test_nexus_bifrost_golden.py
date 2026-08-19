@@ -24,6 +24,17 @@ INSTR = DATA / 'bifrost.instr.json.gz'
 # flattened to lists of child names; see the .md for the expr2nx root cause.
 FLATTENED = ('OFF_GEOMETRY', 'xmin', 'xmax', 'ymin', 'ymax', 'xwidth', 'yheight')
 
+# Values this port deliberately writes differently from the golden; each is
+# justified in bifrost_nexus_structure_golden.md
+CORRECTED = (
+    'detector_number',
+    'segment_rows',
+    # The pixel pitch fix moves both the offsets and the one shared cylinder;
+    # '/geometry.children/vertices' is the NXcylindrical_geometry, not OFF_GEOMETRY
+    'y_pixel_offset',
+    '/geometry.children/vertices',
+)
+
 
 @pytest.fixture(scope='module')
 def golden():
@@ -167,7 +178,7 @@ def test_no_unclassified_differences(converted, golden):
     def classified(path):
         if any(f'/{name}.' in path or path.endswith(f'/{name}') for name in FLATTENED):
             return True
-        if 'detector_number' in path:
+        if any(name in path for name in CORRECTED):
             return True
         return path.endswith('/mcstas.config.values')
 

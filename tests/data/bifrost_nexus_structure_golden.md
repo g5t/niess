@@ -28,7 +28,9 @@ names in identical order, and an identical `NX_class` census (132 `NXcoordinate_
 119 `NXguide`, 45 `NXcrystal`, 45 `NXdetector`, 6 `NXdisk_chopper`, 5 `NXmonitor`,
 5 `NXaperture`, 1 `NXmoderator`, 2 datasets).
 
-766 leaf differences remain. Every one falls into a category below; none is unexplained.
+Leaf differences remain in the categories below; every one is accounted for, none is
+unexplained. Categories 1-3 and 6 date from the original port; 4 and 5 are later
+corrections to BIFROST-specific translators.
 `tests/test_nexus_bifrost_golden.py` asserts exactly this classification, so a new
 difference fails the suite rather than passing unnoticed.
 
@@ -83,7 +85,31 @@ off the resulting Python `int`. This port honours the declared dtype.
 `cylinders` is deliberately **not** narrowed: the registered translator passes a plain
 Python list, expressing no int32 intent, so it stays `int64` and matches the golden.
 
-### 4. `mcstas` instrument source — 1 difference
+### 4. `segment_rows` — 45 differences (one per analyzer)
+
+The golden holds the **string `"None"`**: `moreniius` read a `NV` parameter that
+`Monochromator_Rowland` does not define, got `None` back, and its writer stringified
+it. The component is a single row of `NH` horizontal segments, so this port writes the
+integer `1`.
+
+### 5. Detector pixel pitch — 135 + 4500 differences (`geometry/vertices`, `y_pixel_offset`)
+
+`moreniius` computed the half-pixel length as `height / (no + 1) / 2`, an off-by-one
+that treats the `no + 1` bin *edges* as if they were pixels. The component itself bins
+with `linear = floor(no * ty)` over `ty` normalised across the full tube `height`
+(`Detector_tubes.comp`), so there are exactly `no` bins of length `height / no`, centred
+at `-height/2 + (k + 0.5) * height/no`.
+
+The correct half-pixel is therefore `height / no / 2`, which this port uses. It fixes
+two things at once: pixel centres now sit exactly on the component's own bin centres
+(verified to 4e-17), and the single shared cylinder is exactly one pitch long instead of
+~1% short, which had left a 23 um dead gap between every pair of adjacent pixels.
+
+Note `dead_length` does not enter here: the component applies it as a weight taper near
+the tube ends (`p *= end_steps(...)`), not as a change to the binning, so the pixel grid
+covers the full `height`.
+
+### 6. `mcstas` instrument source — 1 difference
 
 The verbatim `str(instr)` dump differs by a single trailing newline, which `nexusformat`
 stripped. Cosmetic.
