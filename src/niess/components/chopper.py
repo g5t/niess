@@ -33,7 +33,12 @@ class DiscChopper(Chopper):
         return dot(vector(value=[0, 0, 1.]), self.velocity).to(unit='Hz')
 
     def chopper_lib_parameters(self):
-        """Useful for specifying elements of a vector used by chopper-lib"""
+        """Useful for specifying elements of a vector used by chopper-lib
+
+        :mod:`niess.chopcalc` is the maintained path: it reads the emitted instrument
+        rather than a calibration, so it finds choppers nested inside sections, measures
+        flight paths along the beam, and handles discs this method refuses.
+        """
         from scipp import max, min, norm
         speed_name = f'{self.name}speed'
         # chopper-lib wants a phase in degrees; the run-time knob is a delay in seconds,
