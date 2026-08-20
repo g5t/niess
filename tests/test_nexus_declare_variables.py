@@ -11,7 +11,7 @@ import pytest
 INSTR = """DEFINE INSTRUMENT declared_variable_test(dummy=0)
 DECLARE %{
 double chopper_nu;
-double chopper_phase = 15.0;
+double chopper_delay = 0.015;
 %}
 INITIALIZE %{
 chopper_nu = 14.0;
@@ -19,7 +19,7 @@ chopper_nu = 14.0;
 TRACE
 COMPONENT origin = Arm() AT (0, 0, 0) ABSOLUTE
 COMPONENT sample = Arm() AT (0, 0, 20) RELATIVE origin
-COMPONENT ch = DiskChopper(theta_0=170, radius=0.35, nu=chopper_nu, phase=chopper_phase) AT (0, 0, 10) RELATIVE origin
+COMPONENT ch = DiskChopper(theta_0=170, radius=0.35, nu=chopper_nu, delay=chopper_delay) AT (0, 0, 10) RELATIVE origin
 END
 """
 
@@ -38,7 +38,7 @@ def context(instr):
 
 def test_declared_variables_recovered(context):
     """Both DECLARE'd names are recovered, whichever block gives them a value."""
-    assert 'chopper_phase' in context.declared
+    assert 'chopper_delay' in context.declared
     assert 'chopper_nu' in context.declared
 
 
@@ -46,7 +46,7 @@ def test_declare_initializer_folds(context):
     """A variable initialized in its DECLARE statement folds to that literal."""
     from mccode_antlr.common import Expr
     from niess.nexus.expression import Literal
-    assert context.resolve(Expr.parse('chopper_phase')) == Literal(15.0)
+    assert context.resolve(Expr.parse('chopper_delay')) == Literal(0.015)
 
 
 def test_initialize_assignment_folds(context):
@@ -79,4 +79,4 @@ def test_disk_chopper_parameters_are_literals(instr):
     chopper = find_child(instrument, 'ch')
 
     assert find_child(chopper, 'rotation_speed')['config']['values'] == 14.0
-    assert find_child(chopper, 'phase')['config']['values'] == 15.0
+    assert find_child(chopper, 'delay')['config']['values'] == 0.015

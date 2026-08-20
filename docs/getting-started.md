@@ -21,7 +21,7 @@ it can be compiled and run by McStas like any other.
 
 Seven components come out of that: the moderator, two guide units, a chopper, a jaw, a
 monitor and the sample position. So do six run-time parameters —
-`source_lambda_min`, `source_lambda_max`, `chopperspeed`, `chopperphase`, `jaw_l` and
+`source_lambda_min`, `source_lambda_max`, `chopperspeed`, `chopperdelay`, `jaw_l` and
 `jaw_r` — which nothing had to declare by hand. The chopper and the jaw generate their
 own, and the source wavelengths were given in the calibration as parameter
 specifications rather than values.

@@ -355,7 +355,7 @@ def curved_guide_parameters(guide_start_vec, guide_start_rot, bunker_chopper_hei
         'height': bunker_chopper_height,
         'angle': scalar(38.26, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
-        'phase': scalar(0., unit='deg'),
+        'delay': scalar(0., unit='s'),
         'offset': offset,
     }
 
@@ -388,7 +388,7 @@ def curved_guide_parameters(guide_start_vec, guide_start_rot, bunker_chopper_hei
         'height': bunker_chopper_height,
         'angle': scalar(52.01, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
-        'phase': scalar(0., unit='deg'),
+        'delay': scalar(0., unit='s'),
         'offset': offset,
     }
     section, last_p, last_r = curved_guide_device_partial_dict(

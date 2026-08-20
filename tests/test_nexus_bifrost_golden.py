@@ -33,6 +33,9 @@ CORRECTED = (
     # '/geometry.children/vertices' is the NXcylindrical_geometry, not OFF_GEOMETRY
     'y_pixel_offset',
     '/geometry.children/vertices',
+    # NXdisk_chopper now carries 'delay' where the golden carried 'phase'; the frozen
+    # instrument phases its choppers, so this one reads the comp default. See the .md
+    'delay',
 )
 
 

@@ -38,12 +38,12 @@ def main(outdir: Path) -> None:
     assembler.component('sample', 'Arm', at=((0, 0, 8), 'origin'))
     # --8<-- [end:build]
 
-    # Three McStas components, sharing one speed and one phase
+    # Three McStas components, sharing one speed and one delay
     assert [c.name for c in assembler.instrument.components] == [
         'origin', 'pack_slit_0', 'pack_slit_1', 'pack_slit_2', 'sample',
     ]
     assert sorted(p.name for p in assembler.instrument.parameters) == [
-        'packphase', 'packspeed',
+        'packdelay', 'packspeed',
     ]
 
     # --8<-- [start:tags]

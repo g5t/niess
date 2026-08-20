@@ -47,7 +47,7 @@ Two things to notice while mapping:
 - **The jaw's opening was already run-time.** `xmin = jaw_l` in the original becomes
   free: `Jaw` declares `{name}_l` and `{name}_r` itself, so you delete those instrument
   parameters from your list rather than re-declaring them. The same goes for the
-  chopper's `nu` and `phase`.
+  chopper's `nu` and `delay`.
 - **Nothing may fit.** If so, that component needs a `Component` subclass — three
   methods, described in
   [Writing a component](new-instrument-submodule.md#writing-a-component).

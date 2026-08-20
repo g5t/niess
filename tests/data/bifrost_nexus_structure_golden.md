@@ -30,7 +30,8 @@ names in identical order, and an identical `NX_class` census (132 `NXcoordinate_
 
 Leaf differences remain in the categories below; every one is accounted for, none is
 unexplained. Categories 1-3 and 6 date from the original port; 4 and 5 are later
-corrections to BIFROST-specific translators.
+corrections to BIFROST-specific translators; 7 is the move from chopper `phase` to
+chopper `delay`.
 `tests/test_nexus_bifrost_golden.py` asserts exactly this classification, so a new
 difference fails the suite rather than passing unnoticed.
 
@@ -113,6 +114,26 @@ covers the full `height`.
 
 The verbatim `str(instr)` dump differs by a single trailing newline, which `nexusformat`
 stripped. Cosmetic.
+
+### 7. `NXdisk_chopper` timing — 36 differences (6 choppers × 6 keys)
+
+The golden writes `phase` in degrees; this port writes `delay` in seconds. McStas'
+`DiskChopper` acts on `delay` alone — `phase` is converted to one in INITIALIZE and is
+otherwise dead in TRACE — and `delay` is what the real choppers are set with, so it is
+what `niess` emits and what the translator reads.
+
+The comparison walks children positionally, so all 36 differences are the one node:
+converted `delay` against golden `phase`, six keys apiece.
+
+The values differ too, and not just in units. `bifrost.instr.json.gz` is a *pre-change*
+`niess` output: its choppers carry `nu=Symbol('<name>speed')` and
+`phase=Symbol('<name>phase')` with no `delay` at all. So the translator reads
+`DiskChopper`'s own default and writes `delay: 0.0` where the golden has an `NXlog` link
+to `<name>phase`. That is the accepted cost of emitting `delay` *instead of* `phase`
+rather than both: an instrument that phases its choppers in degrees does not survive the
+round trip. It only affects instruments written against the old convention — a BIFROST
+rebuilt from `niess.bifrost.parameters` declares `<name>delay/"s"` and translates to a
+proper `NXlog` link.
 
 ## Not represented here
 

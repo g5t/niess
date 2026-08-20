@@ -155,7 +155,7 @@ def primary_parameters(use_tcs=False):
         'height': bunker_chopper_height,
         'angle': scalar(170., unit='deg'),
         'frequency': scalar(14., unit='Hz'),
-        'phase': scalar(0., unit='deg'),
+        'delay': scalar(0., unit='s'),
         'offset': offset,
     }
     p['pulse_shaping_chopper_2'] = {
@@ -165,7 +165,7 @@ def primary_parameters(use_tcs=False):
         'height': bunker_chopper_height,
         'angle': scalar(170., unit='deg'),
         'frequency': scalar(14., unit='Hz'),
-        'phase': scalar(0., unit='deg'),
+        'delay': scalar(0., unit='s'),
         'offset': offset,
     }
 

@@ -86,7 +86,7 @@ def diskchopper_translator(t):
         t.parameter_node('rotation_speed', source='nu', dtype=float, attrs={'units': 'Hz'}),
         dataset('radius', radius, attrs={'units': 'm'}),
         dataset('slit_angle', theta_0, attrs={'units': 'degrees'}),
-        t.parameter_node('phase', dtype=float, attrs={'units': 'degrees'}),
+        t.parameter_node('delay', dtype=float, attrs={'units': 's'}),
         dataset('slit_height', yheight if yheight else radius, attrs={'units': 'm'}),
     ])
 
@@ -226,6 +226,7 @@ def multi_slit_chopper_translator(t):
     from the provenance role, so it does not depend on the order the instances appear
     in the instrument.
     """
+    from . import expression
     from ..provenance import NiessProvenance
 
     if t.provenance is None or t.provenance.role != 'nexus-group-primary':
@@ -252,6 +253,20 @@ def multi_slit_chopper_translator(t):
     ]
 
     extra = t.provenance.extra
+
+    # The disc's own delay, not this instance's: each emitted opening carries the shared
+    # delay plus its own fixed offset, and that offset is already in ``slit_edges``.
+    delay_parameter = extra.get('delay_parameter')
+    if delay_parameter is None and extra.get('nexus_group_id') is not None:
+        delay_parameter = f'{extra["nexus_group_id"]}delay'
+    if delay_parameter is not None:
+        children.append(expression.parameter_node(
+            'delay',
+            expression.LinkedLog(
+                delay_parameter, f'{t.context.nxlog_root}/{delay_parameter}'),
+            attrs={'units': 's'},
+        ))
+
     if 'top_dead_center' in extra:
         children.append(dataset('top_dead_center', float(extra['top_dead_center']),
                                 attrs={'units': 'degrees'}))

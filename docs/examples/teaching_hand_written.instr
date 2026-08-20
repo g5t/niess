@@ -5,7 +5,7 @@
  */
 DEFINE INSTRUMENT teaching_hand_written(
   chopperspeed = 14.0,
-  chopperphase = 0.0,
+  chopperdelay = 0.0,
   jaw_l = -0.015,
   jaw_r = 0.015
 )
@@ -26,7 +26,7 @@ COMPONENT unit_2 = Guide_gravity(
 ) AT (0, 0, 2.01) RELATIVE unit_1
 
 COMPONENT chopper = DiskChopper(
-  radius = 0.35, theta_0 = 170.0, nu = chopperspeed, phase = chopperphase,
+  radius = 0.35, theta_0 = 170.0, nu = chopperspeed, delay = chopperdelay,
   nslit = 1, yheight = 0.06
 ) AT (0, -0.35, 3.25) RELATIVE unit_2
 

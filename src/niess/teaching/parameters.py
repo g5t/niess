@@ -87,7 +87,7 @@ def guide_parameters(ref_p, ref_r):
 def chopper_parameters(ref_p, ref_r):
     """A single-window disc chopper.
 
-    ``DiscChopper`` declares ``{name}speed`` and ``{name}phase`` as instrument
+    ``DiscChopper`` declares ``{name}speed`` and ``{name}delay`` as instrument
     parameters, so both are run-time settable -- which is what makes them appear in the
     NeXus output as links to an ``NXlog`` rather than as fixed numbers.
     """
@@ -99,7 +99,7 @@ def chopper_parameters(ref_p, ref_r):
         'radius': 350 * mm,
         'angle': scalar(170.0, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
-        'phase': scalar(0.0, unit='deg'),
+        'delay': scalar(0.0, unit='s'),
         'height': 60 * mm,
         'width': 40 * mm,
         # The disc centre sits above the beam; Component.to_mccode adds this offset

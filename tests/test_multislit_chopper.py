@@ -67,17 +67,45 @@ def test_each_opening_carries_its_own_width(assembled):
 
 
 def test_each_opening_turns_to_the_beam_from_where_it_sits(assembled):
-    """McStas phase is how far the disc turns before an opening reaches the beam.
+    """McStas delay is when an opening's centre is at the beam.
 
     Openings are centred at 20, 120 and 360 degrees from the mark; the beam sits at 90,
-    so the disc turns through the difference, wrapped into one revolution.
+    so the disc turns through the difference, wrapped into one revolution. Each opening
+    reads its own start-up variable rather than a number, because how long that turn
+    takes is not known until the disc has a speed.
     """
-    phases = [str(c.get_parameter('phase').value) for c in instances(assembled)]
-    assert phases == [
-        'packphase + 70.0',    # (90 - 20)
-        'packphase + 330.0',   # (90 - 120) mod 360
-        'packphase + 90.0',    # (90 - 360) mod 360 -- the opening straddling the mark
-    ]
+    delays = [str(c.get_parameter('delay').value) for c in instances(assembled)]
+    assert delays == ['pack_slit_0_delay', 'pack_slit_1_delay', 'pack_slit_2_delay']
+
+
+def test_which_way_the_disc_turns_is_decided_at_run_time(assembled):
+    """Speed is a run-time parameter, so its sign cannot be baked in here.
+
+    An opening 70 degrees counter-clockwise of the beam is 290 degrees clockwise of it,
+    and a disc reaches it the way it happens to be turning. Both angles are geometry, so
+    both are computed here; picking between them needs the speed, so the generated C
+    does that -- along with dividing by a magnitude that is equally unknown.
+    """
+    text = str(assembled)
+    assert 'double pack_slit_0_delay;' in text
+    assert ('pack_slit_0_delay = packdelay '
+            '+ (packspeed < 0 ? 290.0 : 70.0) / (360.0 * fabs(packspeed));') in text
+    # 330 counter-clockwise is 30 the other way; 90 is 270
+    assert '(packspeed < 0 ? 30.0 : 330.0)' in text
+    assert '(packspeed < 0 ? 270.0 : 90.0)' in text
+
+
+def test_an_opening_already_at_the_beam_needs_no_variable():
+    """It is at the beam at the disc's own delay however the disc turns."""
+    cal = calibration(windows=array(values=[80.0, 100.0], dims=['edges'], unit='deg'))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    MultiSlitChopper.from_calibration(cal).to_mccode(
+        assembler, at='origin', rotate='origin')
+
+    only = instances(assembler.instrument)[0]
+    assert str(only.get_parameter('delay').value) == 'packdelay'
+    assert 'pack_slit_0_delay' not in str(assembler.instrument)
 
 
 def test_every_opening_is_in_one_group(assembled):
@@ -112,9 +140,9 @@ def test_two_discs_do_not_share_a_group():
     assert groups['first_slit_0'] != groups['second_slit_0']
 
 
-def test_the_disc_has_one_speed_and_one_phase(assembled):
+def test_the_disc_has_one_speed_and_one_delay(assembled):
     """One physical disc, so one pair of run-time parameters -- not one per opening."""
-    assert sorted(p.name for p in assembled.parameters) == ['packphase', 'packspeed']
+    assert sorted(p.name for p in assembled.parameters) == ['packdelay', 'packspeed']
     assert all(str(c.get_parameter('nu').value) == 'packspeed'
                for c in instances(assembled))
 
@@ -217,6 +245,23 @@ def test_the_openings_are_rebuilt_as_one_nexus_group(assembled):
 
     for name in ('pack_slit_0', 'pack_slit_1', 'pack_slit_2'):
         assert find_child(instrument, name) is None
+
+
+def test_the_rebuilt_disc_carries_the_discs_own_delay(assembled):
+    """The disc has one delay; where each opening sits is already in ``slit_edges``.
+
+    So the NeXus group links the shared ``packdelay`` NXlog, rather than the primary
+    instance's own parameter -- that one is an expression carrying slit 0's offset,
+    which would describe the disc by one arbitrary opening.
+    """
+    disc = find_child(instrument_group(to_nexus_structure(assembled, origin='sample')),
+                      'pack')
+    delay = find_child(disc, 'delay')
+
+    assert get_attribute(delay, 'NX_class') == 'NXlog'
+    assert get_attribute(delay, 'units') == 's'
+    assert find_child(delay, 'value')['config']['source'] == \
+        '/entry/parameters/packdelay/value'
 
 
 def test_rebuilding_follows_the_tags_not_the_instance_order(assembled):

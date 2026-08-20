@@ -8,7 +8,7 @@ from mccode_antlr.assembler import Assembler
 class Chopper(Component):
     """Any device which periodically opens a path that particles may traverse"""
     velocity: Variable  # angular velocity scalar or vector
-    phase: Variable
+    delay: Variable  # the time an opening is on the path, as real instruments are set
     radius: Variable
     windows: Variable
     width: Variable  # the path width
@@ -19,7 +19,8 @@ class DiscChopper(Chopper):
     """Ideally infinitely thin material with rotation vector parallel to the path"""
     # `radius` is the outer dimension of the disc.
     # `windows` are ordered angular edges of the openings in the disc
-    # `phase` is the time=0 angular orientation of the disc
+    # `delay` is when an opening's centre is on the path -- McStas' DiskChopper acts on
+    #     this and only derives `phase` from it, so it is what gets emitted.
     offset: Variable # the position of the path relative to the disc center
 
     @property
@@ -35,12 +36,16 @@ class DiscChopper(Chopper):
         """Useful for specifying elements of a vector used by chopper-lib"""
         from scipp import max, min, norm
         speed_name = f'{self.name}speed'
-        phase_name = f'{self.name}phase'
+        # chopper-lib wants a phase in degrees; the run-time knob is a delay in seconds,
+        # so turn one into the other in the generated C rather than redefine its field.
+        # This inverts what DiskChopper does with a phase it is given -- divide by the
+        # magnitude of the speed -- so the two agree on what a phase means.
+        phase_expr = f'360*fabs({speed_name})*{self.name}delay'
         if self.windows.size != 2:
             raise ValueError("chopper-lib expects only one window")
         angle = (max(self.windows) - min(self.windows)).to(unit='deg').value
         distance = norm(self.position).to(unit='m').value
-        return '{' + f'{speed_name}, {phase_name}, {angle}, {distance}' + '}'
+        return '{' + f'{speed_name}, {phase_expr}, {angle}, {distance}' + '}'
 
     @classmethod
     def from_calibration(cls, cal: dict):
@@ -51,7 +56,7 @@ class DiscChopper(Chopper):
         velocity = cal.get('velocity', cal.get('frequency'))
         if velocity is None:
             raise ValueError('velocity (or frequency) cannot be None')
-        phase = cal.get('phase', scalar(0.0, unit='deg'))
+        delay = cal.get('delay', scalar(0.0, unit='s'))
         radius = cal['radius']
         if 'windows' not in cal:
             cal['windows'] = cal['angle'].to(unit='deg') / 2 * array(values=[-1, 1], dims=['edges'])
@@ -64,7 +69,7 @@ class DiscChopper(Chopper):
             position=position,
             orientation=orientation,
             velocity=velocity,
-            phase=phase,
+            delay=delay,
             radius=radius,
             windows=windows,
             width=width,
@@ -86,7 +91,8 @@ class DiscChopper(Chopper):
             'nslit': 1,
             'radius': self.radius.to(unit='m').value,
             'nu': f'{self.name}speed',
-            'phase': f'{self.name}phase',
+            # Not `phase`: a non-zero one makes DiskChopper ignore `delay` and warn.
+            'delay': f'{self.name}delay',
         }
         # Only add width of height if provided:
         if self.width is not None:
@@ -102,7 +108,7 @@ class DiscChopper(Chopper):
     ):
         from ..mccode import ensure_runtime_line as ensure
         ensure(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
-        ensure(assembler, f'{self.name}phase/"degree" = {self.phase.to(unit="deg").value}')
+        ensure(assembler, f'{self.name}delay/"s" = {self.delay.to(unit="s").value}')
         # the offset is handled by super's to_mccode -- no problems.
         return super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
 
@@ -131,7 +137,7 @@ class MultiSlitChopper(DiscChopper):
         number of **positive**, increasing values, two per opening.
 
     Every angle is positive counter-clockwise viewed facing **+z**, i.e. looking
-    downstream. An opening that straddles the reference mark at phase zero is written
+    downstream. An opening that straddles the reference mark at zero delay is written
     as a final edge beyond 360 degrees -- ``[350, 370]`` rather than ``[350, 10]`` --
     so the pairs stay ordered and each width is simply the difference.
     """
@@ -201,18 +207,51 @@ class MultiSlitChopper(DiscChopper):
         """
         return f'{self.name}_group'
 
-    def _mccode_phase(self, opening: float, closing: float) -> float:
-        """How far the disc turns before this opening reaches the beam, in degrees.
+    def _counter_clockwise_turn(self, opening: float, closing: float) -> float:
+        """How far counter-clockwise this opening is from the beam, in degrees.
 
-        McStas puts the centre of a ``DiskChopper``'s slit at the beam when the disc has
-        turned by ``phase``. Here an opening's centre starts ``centre`` degrees from the
-        mark and the beam sits ``beam_position`` degrees from it, so the disc turns
-        through the difference. The result is wrapped into ``[0, 360)`` because a
-        rotating disc reaches the same place every revolution.
+        An opening's centre sits ``centre`` degrees from the mark and the beam sits
+        ``beam_position`` degrees from it, so the angle between them is the difference,
+        wrapped into one revolution because a rotating disc reaches the same place every
+        turn.
+
+        This is geometry, so it is fixed and direction-free. Which way the disc actually
+        travels to close that angle -- and therefore how long it takes -- depends on the
+        sign of a run-time parameter, so that part is left to the generated C.
         """
         centre = (opening + closing) / 2
         beam = self.beam_position.to(unit='deg').value
         return (beam - centre) % 360.0
+
+    def _slit_delay(
+            self, assembler: Assembler, name: str, opening: float, closing: float
+    ) -> str:
+        """When this opening's centre is at the beam, as a McStas ``delay``.
+
+        Every opening turns with the disc, so they share the one run-time
+        ``{name}delay``; each is offset from it by however long the disc takes to bring
+        that opening round. The angle is fixed geometry, but the time is not: it depends
+        on both the magnitude and the *sign* of ``{name}speed``, and neither is known
+        until the simulation runs. A disc that turns clockwise reaches an opening lying
+        counter-clockwise of the beam by going the other way round, through the
+        explementary angle.
+
+        So the angle is computed here and the rest is left to the generated C, where the
+        speed is a real number rather than a name. An opening already at the beam is a
+        special case worth taking: it is there at ``{name}delay`` whichever way the disc
+        spins, so it needs no variable at all.
+        """
+        turn = self._counter_clockwise_turn(opening, closing)
+        if turn == 0:
+            return f'{self.name}delay'
+
+        speed = f'{self.name}speed'
+        assembler.declare(f'double {name}_delay;')
+        assembler.initialize(
+            f'{name}_delay = {self.name}delay + '
+            f'({speed} < 0 ? {360.0 - turn} : {turn}) / (360.0 * fabs({speed}));'
+        )
+        return f'{name}_delay'
 
     def to_mccode(
             self, assembler: Assembler,
@@ -225,7 +264,7 @@ class MultiSlitChopper(DiscChopper):
 
         ensure_runtime_line(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
         ensure_runtime_line(
-            assembler, f'{self.name}phase/"degree" = {self.phase.to(unit="deg").value}'
+            assembler, f'{self.name}delay/"s" = {self.delay.to(unit="s").value}'
         )
 
         position = self.position + self.offset
@@ -238,13 +277,13 @@ class MultiSlitChopper(DiscChopper):
 
         instances = []
         for index, (opening, closing) in enumerate(slits):
+            name = f'{self.name}_slit_{index}'
             parameters = dict(shared)
             parameters['theta_0'] = closing - opening
-            # every opening turns with the disc, so they share one run-time phase
-            parameters['phase'] = f'{self.name}phase + {self._mccode_phase(opening, closing)}'
+            parameters['delay'] = self._slit_delay(assembler, name, opening, closing)
 
             instance = assembler.component(
-                f'{self.name}_slit_{index}', component,
+                name, component,
                 at=placement, rotate=rotation, parameters=parameters,
             )
             # One disc, so a neutron passes if it clears *any* opening. Ungrouped,
@@ -259,6 +298,9 @@ class MultiSlitChopper(DiscChopper):
                     extra={
                         'nexus_group_id': self.name,
                         'nexus_group_index': index,
+                        # The disc's own timing, so a translator rebuilding the disc can
+                        # link it without re-deriving the parameter naming convention.
+                        'delay_parameter': f'{self.name}delay',
                         'slit_edges': [opening, closing],
                         'top_dead_center': self.top_dead_center.to(unit='deg').value,
                         'beam_position': self.beam_position.to(unit='deg').value,
@@ -273,5 +315,5 @@ class FermiChopper(Chopper):
     its center, rotation vector parallel to its axis, and perpendicular to the path"""
     # `radius` describes the cylinder dimension
     # `windows` are the edges of the channels, as offsets from the central line
-    # `phase` is the t=0 angular orientation of the central line wrt the path
+    # `delay` is when the central line is aligned with the path
     curvature: Variable
