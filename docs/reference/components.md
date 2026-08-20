@@ -45,13 +45,13 @@ fixed numbers.
 
 | niess class | emits | calibration keys |
 | --- | --- | --- |
-| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `phase`, `width`, `height`, `offset` |
+| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `offset` |
 | `MultiSlitChopper` | one `DiskChopper` **per opening** | as `DiscChopper`, plus `top_dead_center` and `beam_position`, with `windows` holding two edges per opening |
 
-`DiscChopper` declares `{name}speed` and `{name}phase` as instrument parameters, and
+`DiscChopper` declares `{name}speed` and `{name}delay` as instrument parameters, and
 accepts a single opening only. A disc whose openings are neither identical nor evenly
 spaced is a `MultiSlitChopper`: it emits one `DiskChopper` per opening, sharing one
-speed and phase, places them in one McStas `GROUP` so a neutron passes if it clears any
+speed and delay, places them in one McStas `GROUP` so a neutron passes if it clears any
 opening, and tags them so `niess.nexus` rebuilds them as a single `NXdisk_chopper`. Its geometry follows that NeXus class: angles positive
 counter-clockwise facing +z, slit edges positive and increasing from the disc's
 top-dead-centre mark, and a final edge beyond 360 where the last opening straddles the
@@ -59,6 +59,12 @@ mark. See
 [composites](../how-to/new-instrument-submodule.md#composites-when-one-object-is-several-components).
 `offset` shifts the disc centre off the beam axis; `Component.to_mccode` adds it to the
 position. Only a single window is supported.
+
+`delay` is a time, not an angle: it is when an opening's centre is at the beam, which is
+what McStas' `DiskChopper` acts on and what a real chopper is set with. The component
+also accepts a `phase` in degrees, but only converts it to a delay and then ignores it
+([McCode#2347](https://github.com/mccode-dev/McCode/issues/2347) covers the two not being
+exact inverses), so niess emits `delay` and never `phase`.
 
 ## Monitors
 

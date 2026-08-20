@@ -94,7 +94,7 @@ constants, and each gets there differently:
 - `source_lambda_min` / `source_lambda_max` — passed in the calibration as McCode
   parameter specification strings (`'source_lambda_min/"angstrom" = 0.75'`), which
   `ESSource` turns into `DEFINE INSTRUMENT` arguments.
-- `chopperspeed` / `chopperphase` — `DiscChopper` declares these itself.
+- `chopperspeed` / `chopperdelay` — `DiscChopper` declares these itself.
 - `jaw_l` / `jaw_r` — `Jaw` declares these itself.
 
 You only need `ensure_runtime_line(assembler, 'name/"unit" = default')` when writing
@@ -189,14 +189,14 @@ serve McStas and NeXus:
 
 Every angle is positive counter-clockwise viewed facing **+z** — looking downstream —
 and the edges are positive and increasing, two per opening. An opening that straddles
-the mark at phase zero closes *beyond* 360 rather than wrapping round to a smaller
+the mark at zero delay closes *beyond* 360 rather than wrapping round to a smaller
 number, so the pairs stay ordered and each width is just the difference:
 
 ```python
 --8<-- "group_composite.py:build"
 ```
 
-Three McStas components come out, sharing one `packspeed` and one `packphase` — one
+Three McStas components come out, sharing one `packspeed` and one `packdelay` — one
 physical disc, so one pair of run-time knobs — and all three in a single McStas
 `GROUP`, named after the disc.
 
@@ -210,9 +210,22 @@ physical disc, so one pair of run-time knobs — and all three in a single McSta
     Any composite that emits alternatives rather than a sequence needs the same:
     `instance.GROUP(name)`, with a name derived from the object's own — instance names
     are unique within an instrument, so a name-derived group is unique too. Each carries its own width, and its own
-`phase` offset: McStas turns a disc by `phase` to bring an opening to the beam, so an
-opening centred at 20 degrees from the mark, with the beam at 90, needs 70 degrees of
-rotation. The opening straddling the mark is centred at 360 and needs 90.
+`delay` offset: a McStas `delay` is when an opening's centre is at the beam, so an
+opening centred at 20 degrees from the mark, with the beam at 90, arrives 70 degrees of
+rotation later. The opening straddling the mark is centred at 360 and arrives after 90.
+
+How long 70 degrees takes depends on the speed, and a disc that turns the other way
+covers the *other* 290 degrees to get there — neither is known until the simulation
+runs. So the angles are computed when the instrument is built and the arithmetic is
+left to the generated C, one start-up variable per opening:
+
+```c
+double pack_slit_0_delay;
+pack_slit_0_delay = packdelay + (packspeed < 0 ? 290.0 : 70.0) / (360.0 * fabs(packspeed));
+```
+
+An opening already at the beam skips the variable: it is there at `packdelay` whichever
+way the disc spins.
 
 ### Making the group recoverable
 

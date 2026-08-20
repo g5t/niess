@@ -32,7 +32,7 @@ def main(outdir: Path) -> None:
     # the chopper generate their own, and the source wavelengths were given as
     # instrument-parameter specifications in the calibration.
     assert sorted(p.name for p in instrument.parameters) == [
-        'chopperphase', 'chopperspeed', 'jaw_l', 'jaw_r',
+        'chopperdelay', 'chopperspeed', 'jaw_l', 'jaw_r',
         'source_lambda_max', 'source_lambda_min',
     ]
 

@@ -184,7 +184,7 @@ def straight_guide_parameters(guide_pos, guide_rot, chopper_height) -> tuple[dic
         'height': chopper_height,
         'angle': scalar(161.0, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
-        'phase': scalar(0., unit='deg'),
+        'delay': scalar(0., unit='s'),
         'offset': offset,
     }
 
