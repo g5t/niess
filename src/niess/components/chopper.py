@@ -33,7 +33,12 @@ class DiscChopper(Chopper):
         return dot(vector(value=[0, 0, 1.]), self.velocity).to(unit='Hz')
 
     def chopper_lib_parameters(self):
-        """One ``chopper_parameters`` initializer, for chopper-lib
+        """Useful for specifying elements of a vector used by chopper-lib
+
+        :mod:`niess.chopcalc` is the maintained path: it reads the emitted instrument
+        rather than a calibration, so it finds choppers nested inside sections, measures
+        flight paths along the beam, and handles discs this method refuses.
+
 
         The fields are ``{speed, delay, angle, path}``, which chopper-lib 2.0.0 and newer
         take; before that the second was a phase in degrees. Both run-time knobs are

@@ -18,6 +18,7 @@ nav = [
     { "Translate a McStas .instr" = "how-to/translate-an-instr.md" },
     { "Build a new instrument submodule" = "how-to/new-instrument-submodule.md" },
     { "Produce NeXus Structure JSON" = "how-to/nexus-structure.md" },
+    { "Narrow the wavelength band" = "how-to/narrow-the-wavelength-band.md" },
     { "Write NeXus translators" = "how-to/custom-nexus-registry.md" },
   ] },
   { "Reference" = [
