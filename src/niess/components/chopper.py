@@ -33,19 +33,20 @@ class DiscChopper(Chopper):
         return dot(vector(value=[0, 0, 1.]), self.velocity).to(unit='Hz')
 
     def chopper_lib_parameters(self):
-        """Useful for specifying elements of a vector used by chopper-lib"""
+        """One ``chopper_parameters`` initializer, for chopper-lib
+
+        The fields are ``{speed, delay, angle, path}``, which chopper-lib 2.0.0 and newer
+        take; before that the second was a phase in degrees. Both run-time knobs are
+        named rather than valued, so the train is recalculated whenever they change.
+        """
         from scipp import max, min, norm
         speed_name = f'{self.name}speed'
-        # chopper-lib wants a phase in degrees; the run-time knob is a delay in seconds,
-        # so turn one into the other in the generated C rather than redefine its field.
-        # This inverts what DiskChopper does with a phase it is given -- divide by the
-        # magnitude of the speed -- so the two agree on what a phase means.
-        phase_expr = f'360*fabs({speed_name})*{self.name}delay'
+        delay_name = f'{self.name}delay'
         if self.windows.size != 2:
             raise ValueError("chopper-lib expects only one window")
         angle = (max(self.windows) - min(self.windows)).to(unit='deg').value
         distance = norm(self.position).to(unit='m').value
-        return '{' + f'{speed_name}, {phase_expr}, {angle}, {distance}' + '}'
+        return '{' + f'{speed_name}, {delay_name}, {angle}, {distance}' + '}'
 
     @classmethod
     def from_calibration(cls, cal: dict):
