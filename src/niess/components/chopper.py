@@ -63,9 +63,6 @@ class DiscChopper(Chopper):
     """From local +y to the disc's zero mark, which slit angles are measured from."""
     beam_angle: Variable = msgspec.field(default_factory=_zero_degrees)
     """From the zero mark to where the beam crosses the disc."""
-    offset: Variable | None = None
-    """Spindle to beam crossing. Derived from the angles when not given; when given, it is
-    checked against them, since only one of the two can be right."""
 
     @property
     def speed(self):
@@ -79,33 +76,15 @@ class DiscChopper(Chopper):
     def beam_offset(self) -> Variable:
         """Spindle to beam crossing, as the emitted ``AT`` needs it.
 
-        Deferred to here rather than worked out in ``from_calibration`` because the length
-        of this vector is not a property of the chopper: it is ``radius - height/2``,
-        McStas' rule for centring the beam in a slit's radial extent, with ``height``
-        standing in as ``radius`` when it is unset. Storing it would record a McCode
-        implementation detail as though it were geometry, and would go quietly stale if
-        ``radius`` or ``height`` were edited afterwards.
+        Worked out here rather than stored, because the length of this vector is not a
+        property of the chopper: it is ``radius - height/2``, McStas' rule for centring
+        the beam in a slit's radial extent, with ``height`` standing in as ``radius``
+        when it is unset. Keeping it as a field recorded a McCode implementation detail
+        as though it were geometry, and went stale the moment ``radius`` or ``height``
+        was edited.
         """
-        from scipp import allclose, scalar
-
-        turn = (self.zero_angle + self.beam_angle).to(unit='deg')
-        derived = disc_beam_offset(self.radius, self.height,
-                                   self.zero_angle, self.beam_angle)
-
-        if self.offset is None:
-            return derived
-        # A tenth of a millimetre: far below any real placement, far above the arithmetic.
-        if not allclose(self.offset.to(unit='m'), derived.to(unit='m'),
-                        rtol=scalar(0.0), atol=scalar(1e-4, unit='m')):
-            raise ValueError(
-                f"{self.name}: offset is {self.offset.to(unit='m').value} m, but "
-                f"zero_angle + beam_angle = {turn.value} deg puts the beam at "
-                f"{derived.to(unit='m').value} m from the spindle. Only one of the two "
-                f"can be right, and a disc chopper placed off the beam absorbs every "
-                f"neutron without saying so. Give one or the other, or correct whichever "
-                f"is wrong."
-            )
-        return self.offset
+        return disc_beam_offset(self.radius, self.height,
+                                self.zero_angle, self.beam_angle)
 
     def __mccode_offset__(self) -> Variable:
         return self.beam_offset()
@@ -145,12 +124,21 @@ class DiscChopper(Chopper):
             windows = cal['angle'].to(unit='deg') / 2 * array(values=[-1, 1], dims=['edges'])
         width = cal.get('width') # None is actually acceptable
         height = cal.get('height')  # None is acceptable, then slit extends to center
+        if 'offset' in cal:
+            raise ValueError(
+                f"{name}: a disc chopper is placed by where the beam crosses it, not by "
+                f"how far that is from the spindle. Say zero_angle and beam_angle -- "
+                f"beam_angle=180 deg for a disc hanging above the beam -- and the vector "
+                f"follows from them, the radius and the slit height. Ignoring an offset "
+                f"that was meant to be used would move the disc off the beam, where it "
+                f"absorbs every neutron without saying so."
+            )
         # `top_dead_center` and `beam_position` are the NXdisk_chopper field names, which
         # these started out carrying; accept them without writing back to the caller's
         # dictionary, which calibrations reuse across builds.
         zero_angle = cal.get('zero_angle', cal.get('top_dead_center', _zero_degrees()))
         beam_angle = cal.get('beam_angle', cal.get('beam_position', _zero_degrees()))
-        chopper = cls(
+        return cls(
             name=name,
             position=position,
             orientation=orientation,
@@ -162,13 +150,7 @@ class DiscChopper(Chopper):
             height=height,
             zero_angle=zero_angle,
             beam_angle=beam_angle,
-            offset=cal.get('offset'),
         )
-        # Resolve once here so a calibration whose offset and angles disagree is caught
-        # where the calibration is, not later inside an emitted instrument.
-        chopper.beam_offset()
-        return chopper
-
 
     def __mccode__(self) -> tuple[str, dict]:
         from scipp import max, min
@@ -201,7 +183,8 @@ class DiscChopper(Chopper):
         from ..mccode import ensure_runtime_line as ensure
         ensure(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
         ensure(assembler, f'{self.name}delay/"s" = {self.delay.to(unit="s").value}')
-        # the offset is handled by super's to_mccode -- no problems.
+        # where the beam crosses the disc is handled by super's to_mccode, through
+        # the __mccode_offset__ and __mccode_orientation__ hooks below
         return super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
 
 

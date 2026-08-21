@@ -179,11 +179,10 @@ def test_a_straddling_opening_keeps_its_edge_beyond_360(assembled):
     assert float(str(last.get_parameter('theta_0').value)) == 20.0
 
 
-def test_the_offset_moves_the_whole_disc(assembled):
+def test_the_beam_crossing_moves_the_whole_disc(assembled):
     """Every opening is one disc, so the beam crosses all of them in the same place."""
     # 0.32 m below the spindle: `radius - height/2`, half a turn from the zero mark
-    cal = calibration(offset=vector([0, -0.32, 0], unit='m'),
-                      zero_angle=scalar(0.0, unit='deg'),
+    cal = calibration(zero_angle=scalar(0.0, unit='deg'),
                       beam_angle=scalar(180.0, unit='deg'))
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
@@ -191,19 +190,16 @@ def test_the_offset_moves_the_whole_disc(assembled):
         assembler, at='origin', rotate='origin')
 
     for instance in instances(assembler.instrument):
-        assert [str(x) for x in instance.at_relative[0]] == ['0', '-0.32', '5']
+        # compared as numbers: the derived vector carries sin(180 deg) worth of x, which
+        # is 4e-17 m and is not worth pretending is a zero in the emitted text
+        assert [float(str(x)) for x in instance.at_relative[0]] == \
+            pytest.approx([0.0, -0.32, 5.0], abs=1e-12)
 
 
-def test_an_offset_that_the_angles_contradict_is_refused():
-    """Only one of the two can be right, and the wrong one absorbs every neutron.
-
-    A disc chopper placed off the beam does not warn or transmit less -- McStas absorbs
-    everything outside the disc radius, silently. So a calibration that says both, and
-    says them differently, is refused where the calibration is rather than left to
-    produce an instrument that quietly counts nothing.
-    """
-    cal = calibration(offset=vector([0, -0.32, 0], unit='m'))   # angles still default
-    with pytest.raises(ValueError, match='absorbs every neutron'):
+def test_a_calibration_that_still_gives_an_offset_is_refused():
+    """A disc is placed by where the beam crosses it, and only by that."""
+    cal = calibration(offset=vector([0, -0.32, 0], unit='m'))
+    with pytest.raises(ValueError, match='placed by where the beam crosses it'):
         MultiSlitChopper.from_calibration(cal)
 
 
@@ -219,7 +215,6 @@ def test_the_offset_can_be_left_to_the_angles():
     cal.pop('offset', None)
     disc = MultiSlitChopper.from_calibration(cal)
 
-    assert disc.offset is None
     turn = radians(15.0 + 180.0)
     assert disc.beam_offset().to(unit='m').value == pytest.approx(
         [-0.32 * sin(turn), 0.32 * cos(turn), 0.0])

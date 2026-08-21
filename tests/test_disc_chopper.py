@@ -96,28 +96,40 @@ def test_a_disc_with_no_slit_height_is_centred_on_half_its_radius():
     assert disc.beam_offset().to(unit='m').value == pytest.approx([0.0, RADIUS / 2, 0.0])
 
 
-# -- offset and angles have to agree ------------------------------------------
+# -- the angles are the only description --------------------------------------
 
-def test_an_offset_that_the_angles_agree_with_is_kept():
-    disc = DiscChopper.from_calibration(calibration(
-        beam_angle=scalar(180.0, unit='deg'),
-        offset=vector([0, -DELTA_Y, 0], unit='m')))
-    assert disc.offset is not None
-    assert disc.beam_offset().to(unit='m').value == pytest.approx([0.0, -DELTA_Y, 0.0])
-
-
-def test_an_offset_the_angles_contradict_is_refused():
-    """And refused where the calibration is, not inside an emitted instrument."""
-    with pytest.raises(ValueError, match='absorbs every neutron'):
-        DiscChopper.from_calibration(
-            calibration(offset=vector([0, -DELTA_Y, 0], unit='m')))  # angles still default
-
-
-def test_the_offset_may_be_left_out_entirely():
-    """Which is the point: the angles are the description, the vector is derived."""
+def test_the_angles_are_enough_to_place_the_disc():
+    """There is no offset to give: the vector is derived, every time it is needed."""
     disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
-    assert disc.offset is None
+    assert not hasattr(disc, 'offset')
     assert emitted(disc)[0] == pytest.approx([0.0, -DELTA_Y, 5.0])
+
+
+def test_a_calibration_that_still_gives_an_offset_is_refused():
+    """Rather than ignored, which would move the disc without saying so.
+
+    An offset used to be accepted and checked against the angles. Taking it away silently
+    would leave a calibration that meant one thing being read as another -- and a disc
+    chopper off the beam absorbs every neutron without complaining -- so it is an error
+    with the migration in it.
+    """
+    with pytest.raises(ValueError, match='placed by where the beam crosses it'):
+        DiscChopper.from_calibration(
+            calibration(offset=vector([0, -DELTA_Y, 0], unit='m'),
+                        beam_angle=scalar(180.0, unit='deg')))
+
+
+def test_the_derived_offset_follows_an_edited_radius():
+    """Which a stored vector could not do, and is why this is not a field.
+
+    Its length is `radius - height/2`, McStas' rule for centring the beam in the slit --
+    a fact about the emitted component, not about the chopper, and one that goes stale
+    the moment either number changes.
+    """
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    disc.radius = scalar(0.5, unit='m')
+    assert disc.beam_offset().to(unit='m').value == pytest.approx(
+        [0.0, -(0.5 - HEIGHT / 2), 0.0])
 
 
 # -- the names the calibration may use ----------------------------------------
@@ -190,7 +202,6 @@ def test_bifrost_no_longer_says_its_offsets():
     found = list(discs(Primary.from_calibration()))
     assert len(found) == 6
     for disc in found:
-        assert disc.offset is None
         radial = disc.radius - disc.height / 2
         assert disc.beam_offset().to(unit='m').value == pytest.approx(
             [0.0, -radial.to(unit='m').value, 0.0], abs=1e-12)

@@ -30,8 +30,6 @@ def _device_position_offset(dev_dict: dict) -> Variable:
     """
     from scipp import vector
     from ..components.chopper import disc_beam_offset
-    if 'offset' in dev_dict:
-        return dev_dict['offset']
     if 'beam_angle' in dev_dict or 'zero_angle' in dev_dict:
         return disc_beam_offset(dev_dict['radius'], dev_dict.get('height'),
                                 dev_dict.get('zero_angle'), dev_dict.get('beam_angle'))

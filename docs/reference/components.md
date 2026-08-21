@@ -45,7 +45,7 @@ fixed numbers.
 
 | niess class | emits | calibration keys |
 | --- | --- | --- |
-| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `zero_angle`, `beam_angle`, `offset` |
+| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `zero_angle`, `beam_angle` |
 | `MultiSlitChopper` | one `DiskChopper` **per opening** | as `DiscChopper`, with `windows` holding two edges per opening |
 
 A disc chopper's `position` is its **spindle**; the emitted `AT` is the point the beam
@@ -56,9 +56,12 @@ along with the rotation the emitted component carries so the disc ends up on the
 side of the beam. Both default to zero, which puts the beam at the top of the disc; a disc
 hanging above the beam has `beam_angle = 180`.
 
-`offset` may still be given, and is then checked against the angles rather than believed:
-only one of the two can be right, and a disc chopper placed off the beam absorbs every
-neutron without saying so.
+There is no `offset` to give. It was a field until the angles replaced it, and a
+calibration that still sets one is refused rather than ignored — reading a placement
+instruction as though it were absent would move the disc off the beam, where it absorbs
+every neutron without saying so. `disc_beam_offset` is the one formula, and calibration
+code that knows where the beam runs and needs the spindle negates what the chopper
+derives going the other way.
 
 `DiscChopper` declares `{name}speed` and `{name}delay` as instrument parameters, and
 accepts a single opening only. A disc whose openings are neither identical nor evenly
@@ -69,8 +72,8 @@ counter-clockwise facing +z, slit edges positive and increasing from the disc's
 top-dead-centre mark, and a final edge beyond 360 where the last opening straddles the
 mark. See
 [composites](../how-to/new-instrument-submodule.md#composites-when-one-object-is-several-components).
-`offset` shifts the disc centre off the beam axis; `Component.to_mccode` adds it to the
-position. Only a single window is supported.
+Only a single window is supported per emitted `DiskChopper`, which is why a disc with
+several openings emits one apiece.
 
 `delay` is a time, not an angle: it is when an opening's centre is at the beam, which is
 what McStas' `DiskChopper` acts on and what a real chopper is set with. The component

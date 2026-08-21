@@ -73,8 +73,8 @@ class Component(Base, kw_only=True):
 
     Note
     ----
-    If an inheriting class adds an 'offset' attribute to the component, the
-    position reported for McStas/McXtrace/McCode has that offset added to position
+    If an inheriting class overrides `__mccode_offset__`, the position reported
+    for McStas/McXtrace/McCode has that displacement added to position
 
     Parameters
     ----------
@@ -123,13 +123,14 @@ class Component(Base, kw_only=True):
 
         ``position`` is where the component *is*; a McCode component's origin is not
         always the same point -- a disc chopper's is on the beam while its position is the
-        spindle -- so this is what converts between them. Zero unless a subclass says
-        otherwise.
+        spindle -- so this is what converts between them.
+
+        Zero here, and overridden where it is not. It used to read an ``offset`` attribute
+        off whatever component happened to have one, which is a trap: ``PartialEllipse``
+        has an ``offset`` too, meaning a distance along the major axis, and it is only
+        spared because it is not a Component.
         """
         from scipp import vector
-        offset = getattr(self, 'offset', None)
-        if offset is not None:
-            return offset
         # in `position`'s own unit: a calibration may measure in mm, and scipp will not
         # add a length in metres to one in millimetres
         return vector([0., 0., 0.], unit=self.position.unit)

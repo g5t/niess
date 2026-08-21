@@ -163,7 +163,7 @@ until the instrument runs.
 Three worked patterns in the shipped library, in increasing order of involvement:
 
 - `niess/components/aperture.py::Jaw` — declares two run-time parameters, then delegates.
-- `niess/components/chopper.py::DiscChopper` — the same, plus the `offset` convention
+- `niess/components/chopper.py::DiscChopper` — the same, plus `zero_angle`/`beam_angle`
   for a component whose centre is off the beam axis.
 - `niess/components/guide.py::EllipticGuide` — emits its per-segment m-values as
   `DECLARE`d arrays when the guide is segmented.
