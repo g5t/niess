@@ -169,10 +169,12 @@ def test_every_bifrost_chopper_lands_on_the_beam():
             pytest.approx(0.0, abs=1e-9), name
 
 
-def test_bifrost_can_stop_saying_its_offsets():
-    """The explicit offsets agree with the angles, so they are now redundant.
+def test_bifrost_no_longer_says_its_offsets():
+    """The calibration states where the beam crosses; the vector follows.
 
-    Which is the evidence for dropping them from the calibration: nothing changes.
+    Each of BIFROST's six discs used to carry `offset` as a hand-written
+    `-(radius - height/2) * y`, repeated across three files and agreeing with the angles
+    only by luck. `beam_angle = 180` says the same thing once.
     """
     from niess.bifrost import Primary
     from niess.components import DiscChopper as Disc
@@ -185,9 +187,10 @@ def test_bifrost_can_stop_saying_its_offsets():
             elif hasattr(member, 'items'):
                 yield from discs(member)
 
-    for disc in discs(Primary.from_calibration()):
-        explicit = disc.offset
-        assert explicit is not None
-        disc.offset = None
-        assert disc.beam_offset().to(unit='m').value == \
-            pytest.approx(explicit.to(unit='m').value, abs=1e-12)
+    found = list(discs(Primary.from_calibration()))
+    assert len(found) == 6
+    for disc in found:
+        assert disc.offset is None
+        radial = disc.radius - disc.height / 2
+        assert disc.beam_offset().to(unit='m').value == pytest.approx(
+            [0.0, -radial.to(unit='m').value, 0.0], abs=1e-12)

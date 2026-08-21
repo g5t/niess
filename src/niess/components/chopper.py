@@ -10,6 +10,34 @@ def _zero_degrees() -> Variable:
     return scalar(0.0, unit='deg')
 
 
+def disc_beam_offset(radius: Variable, height: Variable | None = None,
+                     zero_angle: Variable | None = None,
+                     beam_angle: Variable | None = None) -> Variable:
+    """Spindle to beam crossing, for a disc of this size with the beam at this angle.
+
+    The length is ``radius - height/2``, McStas' rule for centring the beam in a slit's
+    radial extent, with ``height`` standing in as ``radius`` when it is unset. The
+    direction is ``zero_angle + beam_angle`` counter-clockwise about +z from the local +y
+    axis, so the default of zero puts the beam at the top of the disc.
+
+    Shared with the calibration code, which has the opposite problem: it knows where the
+    beam runs and has to place the spindle. Having one formula rather than two is the
+    point -- the two disagreeing is what put every BIFROST disc on the wrong side of the
+    beam in the first place.
+    """
+    from scipp import vector
+    from scipp.spatial import rotations_from_rotvecs
+    turn = _zero_degrees() if zero_angle is None else zero_angle
+    if beam_angle is not None:
+        turn = turn + beam_angle
+    radial = radius / 2 if height is None else radius - height / 2
+    rotation = rotations_from_rotvecs(
+        vector(value=[0., 0., turn.to(unit='deg').value], unit='deg'))
+    # metres regardless of what the calibration measured the disc in, since this is added
+    # to a position and handed to McCode
+    return (radial * (rotation * vector([0., 1., 0.]))).to(unit='m')
+
+
 class Chopper(Component):
     """Any device which periodically opens a path that particles may traverse"""
     velocity: Variable  # angular velocity scalar or vector
@@ -58,16 +86,11 @@ class DiscChopper(Chopper):
         implementation detail as though it were geometry, and would go quietly stale if
         ``radius`` or ``height`` were edited afterwards.
         """
-        from scipp import allclose, scalar, vector
-        from scipp.spatial import rotations_from_rotvecs
+        from scipp import allclose, scalar
 
         turn = (self.zero_angle + self.beam_angle).to(unit='deg')
-        # McStas' delta_y: the beam runs through the middle of the slit's radial extent
-        radial = self.radius / 2 if self.height is None else self.radius - self.height / 2
-        rotation = rotations_from_rotvecs(vector(value=[0., 0., turn.value], unit='deg'))
-        # metres regardless of what the calibration measured the disc in, since this is
-        # added to a position and handed to McCode
-        derived = (radial * (rotation * vector([0., 1., 0.]))).to(unit='m')
+        derived = disc_beam_offset(self.radius, self.height,
+                                   self.zero_angle, self.beam_angle)
 
         if self.offset is None:
             return derived
