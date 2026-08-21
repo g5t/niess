@@ -61,6 +61,7 @@ def test_an_offset_is_applied_once(teaching):
     section, calibration, name = teaching
     emitted = placements(section, calibration, name)['chopper']
 
-    # the chopper sits 0.35 m above the beam, so its disc centre is 0.35 m below the
-    # position the beam passes through
-    assert float(emitted[1]) == pytest.approx(-0.35)
+    # `position` is the spindle, 0.32 m above the beam, and the offset brings the emitted
+    # AT back down onto it. Applying the offset not at all would leave it at +0.32, and
+    # applying it twice would take it to -0.32, so landing on zero pins "exactly once".
+    assert float(emitted[1]) == pytest.approx(0.0, abs=1e-9)

@@ -1,0 +1,207 @@
+"""Where a disc chopper is, and which side of the beam its spindle sits on.
+
+A niess `DiscChopper`'s `position` is the spindle; a McStas `DiskChopper`'s origin is the
+point the beam crosses the disc. Two angles say where that point is -- `zero_angle` from
+the local +y axis to the disc's zero mark, `beam_angle` from the mark to the beam, both
+counter-clockwise about +z -- and everything else follows from them: the vector between
+the two points, and the rotation the emitted component needs so the disc ends up on the
+right side of the beam.
+
+Getting this wrong does not warn or transmit less. McStas absorbs every neutron outside
+the disc radius, silently, so a chopper placed off the beam counts nothing at all.
+"""
+import pytest
+from mccode_antlr import Flavor
+from mccode_antlr.assembler import Assembler
+from scipp import scalar, vector
+from scipp.spatial import rotations_from_rotvecs
+
+from niess.components import DiscChopper
+
+UPRIGHT = rotations_from_rotvecs(vector([0, 0, 0.0], unit='deg'))
+RADIUS, HEIGHT = 0.35, 0.06
+DELTA_Y = RADIUS - HEIGHT / 2      # McStas' delta_y: the beam runs mid-slit
+
+
+def calibration(**overrides):
+    cal = {
+        'name': 'chopper',
+        'position': vector([0, 0, 5.0], unit='m'),
+        'orientation': UPRIGHT,
+        'radius': scalar(RADIUS, unit='m'),
+        'height': scalar(HEIGHT, unit='m'),
+        'angle': scalar(170.0, unit='deg'),
+        'frequency': scalar(14.0, unit='Hz'),
+        'delay': scalar(0.0, unit='s'),
+    }
+    cal.update(overrides)
+    return cal
+
+
+def emitted(chopper):
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    chopper.to_mccode(assembler)
+    instance = assembler.instrument.components[-1]
+    return ([float(str(x)) for x in instance.at_relative[0]],
+            [float(str(x)) for x in instance.rotate_relative[0]])
+
+
+# -- where the beam crosses the disc ------------------------------------------
+
+def test_the_default_angles_put_the_beam_at_the_top_of_the_disc():
+    """Which is the arrangement McStas' DiskChopper already assumes.
+
+    Its `delta_y = radius - yheight/2` sets the spindle *below* the component origin and
+    it measures opening angles as `atan2(x, y + delta_y)`, zero on the beam. So a disc
+    that takes the defaults needs no turning, and emits the rotation it always did.
+    """
+    disc = DiscChopper.from_calibration(calibration())
+    assert disc.beam_offset().to(unit='m').value == pytest.approx([0.0, DELTA_Y, 0.0])
+    at, rotated = emitted(disc)
+    assert at == pytest.approx([0.0, DELTA_Y, 5.0])
+    assert rotated == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_a_disc_hanging_above_the_beam_is_half_a_turn_round():
+    """The usual arrangement, and the one BIFROST has.
+
+    The beam crosses at the bottom of the disc, so the spindle is above it and the emitted
+    component turns half a turn about z -- which is what puts McStas' disc, which is
+    always drawn below its own origin, above the beam instead.
+    """
+    disc = DiscChopper.from_calibration(
+        calibration(beam_angle=scalar(180.0, unit='deg')))
+    assert disc.beam_offset().to(unit='m').value == pytest.approx([0.0, -DELTA_Y, 0.0])
+    at, rotated = emitted(disc)
+    assert at == pytest.approx([0.0, -DELTA_Y, 5.0])
+    assert rotated == pytest.approx([0.0, 0.0, 180.0])
+
+
+def test_the_two_angles_add():
+    """`zero_angle` reaches the mark and `beam_angle` carries on from there."""
+    from math import cos, radians, sin
+    disc = DiscChopper.from_calibration(calibration(
+        zero_angle=scalar(30.0, unit='deg'), beam_angle=scalar(75.0, unit='deg')))
+    turn = radians(105.0)
+    assert disc.beam_offset().to(unit='m').value == pytest.approx(
+        [-DELTA_Y * sin(turn), DELTA_Y * cos(turn), 0.0])
+    assert emitted(disc)[1] == pytest.approx([0.0, 0.0, 105.0])
+
+
+def test_a_disc_with_no_slit_height_is_centred_on_half_its_radius():
+    """McStas takes an unset `yheight` as the full radius, so the beam runs at radius/2."""
+    cal = calibration()
+    cal.pop('height')
+    disc = DiscChopper.from_calibration(cal)
+    assert disc.beam_offset().to(unit='m').value == pytest.approx([0.0, RADIUS / 2, 0.0])
+
+
+# -- the angles are the only description --------------------------------------
+
+def test_the_angles_are_enough_to_place_the_disc():
+    """There is no offset to give: the vector is derived, every time it is needed."""
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    assert not hasattr(disc, 'offset')
+    assert emitted(disc)[0] == pytest.approx([0.0, -DELTA_Y, 5.0])
+
+
+def test_a_calibration_that_still_gives_an_offset_is_refused():
+    """Rather than ignored, which would move the disc without saying so.
+
+    An offset used to be accepted and checked against the angles. Taking it away silently
+    would leave a calibration that meant one thing being read as another -- and a disc
+    chopper off the beam absorbs every neutron without complaining -- so it is an error
+    with the migration in it.
+    """
+    with pytest.raises(ValueError, match='placed by where the beam crosses it'):
+        DiscChopper.from_calibration(
+            calibration(offset=vector([0, -DELTA_Y, 0], unit='m'),
+                        beam_angle=scalar(180.0, unit='deg')))
+
+
+def test_the_derived_offset_follows_an_edited_radius():
+    """Which a stored vector could not do, and is why this is not a field.
+
+    Its length is `radius - height/2`, McStas' rule for centring the beam in the slit --
+    a fact about the emitted component, not about the chopper, and one that goes stale
+    the moment either number changes.
+    """
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    disc.radius = scalar(0.5, unit='m')
+    assert disc.beam_offset().to(unit='m').value == pytest.approx(
+        [0.0, -(0.5 - HEIGHT / 2), 0.0])
+
+
+# -- the names the calibration may use ----------------------------------------
+
+def test_the_nexus_names_are_accepted():
+    """`top_dead_center` and `beam_position` are what NXdisk_chopper calls these."""
+    disc = DiscChopper.from_calibration(calibration(
+        top_dead_center=scalar(30.0, unit='deg'),
+        beam_position=scalar(75.0, unit='deg')))
+    assert disc.zero_angle.to(unit='deg').value == pytest.approx(30.0)
+    assert disc.beam_angle.to(unit='deg').value == pytest.approx(75.0)
+
+
+def test_reading_a_calibration_does_not_change_it():
+    """Calibrations are reused across builds, so a build must not write back into one."""
+    cal = calibration(top_dead_center=scalar(30.0, unit='deg'))
+    before = dict(cal)
+    DiscChopper.from_calibration(cal)
+    assert cal == before
+    assert 'zero_angle' not in cal
+
+
+# -- the instrument this is for -----------------------------------------------
+
+def test_every_bifrost_chopper_lands_on_the_beam():
+    """And its spindle above, which is where BIFROST's discs actually hang.
+
+    The emitted rotation used to be missing the half turn, so McStas put every disc below
+    the beam and ran them through the top -- a mirror image of the real instrument.
+    """
+    from niess.bifrost import Primary
+    from niess.components import DiscChopper as Disc
+
+    def discs(section, prefix=''):
+        for name, kind in section.items():
+            member = getattr(section, name)
+            if isinstance(member, Disc):
+                yield f'{prefix}{name}', member
+            elif hasattr(member, 'items'):
+                yield from discs(member, f'{prefix}{name}.')
+
+    found = dict(discs(Primary.from_calibration()))
+    assert len(found) == 6
+    for name, disc in found.items():
+        assert disc.beam_angle.to(unit='deg').value == pytest.approx(180.0), name
+        # the spindle is above the beam, and the emitted AT is on it
+        assert disc.position.fields.y.to(unit='m').value > 0, name
+        assert (disc.position + disc.beam_offset()).fields.y.to(unit='m').value == \
+            pytest.approx(0.0, abs=1e-9), name
+
+
+def test_bifrost_no_longer_says_its_offsets():
+    """The calibration states where the beam crosses; the vector follows.
+
+    Each of BIFROST's six discs used to carry `offset` as a hand-written
+    `-(radius - height/2) * y`, repeated across three files and agreeing with the angles
+    only by luck. `beam_angle = 180` says the same thing once.
+    """
+    from niess.bifrost import Primary
+    from niess.components import DiscChopper as Disc
+
+    def discs(section):
+        for name, kind in section.items():
+            member = getattr(section, name)
+            if isinstance(member, Disc):
+                yield member
+            elif hasattr(member, 'items'):
+                yield from discs(member)
+
+    found = list(discs(Primary.from_calibration()))
+    assert len(found) == 6
+    for disc in found:
+        radial = disc.radius - disc.height / 2
+        assert disc.beam_offset().to(unit='m').value == pytest.approx(
+            [0.0, -radial.to(unit='m').value, 0.0], abs=1e-12)

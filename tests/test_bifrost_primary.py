@@ -170,13 +170,14 @@ def beam_dists(comp, start):
 
     That is the component position plus its offset vector, if it has one.
     """
-    from scipp import norm, vector
+    from scipp import norm
     if hasattr(comp, 'parts'):
         return [y for part in comp.parts() for y in beam_dists(getattr(comp, part), start)]
     if hasattr(comp, 'segments'):
         return [y for x in comp.segments for y in beam_dists(x, start)]
-    offset = getattr(comp, 'offset', vector([0, 0, 0.], unit=comp.position.unit))
-    beam_at = comp.position + offset
+    # the same hook the emitted AT goes through, so a disc chopper's beam crossing is
+    # derived from its angles rather than read from an offset it may not carry
+    beam_at = comp.position + comp.__mccode_offset__()
     return [norm(beam_at - start)]
 
 

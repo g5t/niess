@@ -20,6 +20,22 @@ class Type(Enum):
     mask = 4
 
 
+def _device_position_offset(dev_dict: dict) -> Variable:
+    """How far a device's ``position`` sits from the point on the beam that places it.
+
+    Zero for most things, which are on the beam. A disc chopper's position is its spindle,
+    so it is displaced by however far the beam crosses from the disc centre -- derived
+    from the same geometry the chopper itself uses, rather than restated as a vector every
+    calibration has to get right.
+    """
+    from scipp import vector
+    from ..components.chopper import disc_beam_offset
+    if 'beam_angle' in dev_dict or 'zero_angle' in dev_dict:
+        return disc_beam_offset(dev_dict['radius'], dev_dict.get('height'),
+                                dev_dict.get('zero_angle'), dev_dict.get('beam_angle'))
+    return vector([0., 0., 0.], unit='m')
+
+
 def parse_guide_table(table: tuple[tuple[str, Variable],...]):
     import re
 #    r = re.compile(r'(?P<guide>(?P<number>[0-9]+)-\sUnit-(?P<id>[0-9]+)\s(?P<name>[a-zA-Z0-9]+))|(?P<gap>[a-z\s]*gap)')
@@ -185,8 +201,7 @@ def device_partial_dict(ref_p: Variable, ref_r: Variable, device: tuple[tuple[st
                 index += 1
 
                 half_p = at_relative(ref_p, ref_r, dist/2 * vector([0, 0, 1.]))
-                if 'offset' in dev_dict:
-                    half_p -= dev_dict['offset']
+                half_p = half_p - _device_position_offset(dev_dict)
                 d[dev_name] = {'position': half_p, 'orientation': ref_r}
                 d[dev_name].update(dev_dict)
 
@@ -257,8 +272,7 @@ def entering_partial_dict(ref_p: Variable, ref_r: Variable,
                 index += 1
 
                 half_p = at_relative(ref_p, ref_r, dist/2 * vector([0, 0, 1.]))
-                if 'offset' in dev_dict:
-                    half_p -= dev_dict['offset']
+                half_p = half_p - _device_position_offset(dev_dict)
                 d[dev_name] = {'position': half_p, 'orientation': ref_r}
                 d[dev_name].update(dev_dict)
 

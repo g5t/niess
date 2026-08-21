@@ -163,7 +163,7 @@ until the instrument runs.
 Three worked patterns in the shipped library, in increasing order of involvement:
 
 - `niess/components/aperture.py::Jaw` — declares two run-time parameters, then delegates.
-- `niess/components/chopper.py::DiscChopper` — the same, plus the `offset` convention
+- `niess/components/chopper.py::DiscChopper` — the same, plus `zero_angle`/`beam_angle`
   for a component whose centre is off the beam axis.
 - `niess/components/guide.py::EllipticGuide` — emits its per-segment m-values as
   `DECLARE`d arrays when the guide is segmented.
@@ -183,8 +183,8 @@ serve McStas and NeXus:
 
 | | |
 | --- | --- |
-| `top_dead_center` | where the disc's reference mark sits, as an angle from the local **+y** axis |
-| `beam_position` | where the beam crosses the disc, as an angle from that mark |
+| `zero_angle` | where the disc's reference mark sits, as an angle from the local **+y** axis (`top_dead_center` in `NXdisk_chopper`, and accepted under that name) |
+| `beam_angle` | where the beam crosses the disc, as an angle from that mark — **180** for a disc that hangs above the beam (`beam_position` in `NXdisk_chopper`) |
 | `windows` | the angular edges of the openings, measured from the mark |
 
 Every angle is positive counter-clockwise viewed facing **+z** — looking downstream —

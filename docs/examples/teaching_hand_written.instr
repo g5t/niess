@@ -28,7 +28,7 @@ COMPONENT unit_2 = Guide_gravity(
 COMPONENT chopper = DiskChopper(
   radius = 0.35, theta_0 = 170.0, nu = chopperspeed, delay = chopperdelay,
   nslit = 1, yheight = 0.06
-) AT (0, -0.35, 3.25) RELATIVE unit_2
+) AT (0, 0, 3.25) RELATIVE unit_2
 
 COMPONENT jaw = Slit(
   xmin = jaw_l, xmax = jaw_r, yheight = 0.05

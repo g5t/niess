@@ -1,5 +1,7 @@
 from scipp import Variable
 
+from ..components.chopper import disc_beam_offset
+
 
 def known_channel_params():
     from scipp import array, scalar, vector, vectors
@@ -147,16 +149,19 @@ def primary_parameters(use_tcs=False):
     bunker_chopper_height = scalar(0.047514 + 2 * 0.00331, unit='m')  # 2 * margin of error for floor settling in bunker
     hall_chopper_height = scalar(0.09 + 2 * 0.00423, unit='m')  # 2 * margin of error for piles settling under the long guide hall
     radius = 350 * mm
-    offset = -(radius - bunker_chopper_height / 2) * vector([0, 1., 0])
+    # `position` is the spindle and the beam crosses the disc below it, so the disc
+    # centre sits that far above the beam. One formula, shared with the chopper.
+    beam_angle = scalar(180., unit='deg')
+    spindle = -disc_beam_offset(radius, bunker_chopper_height, beam_angle=beam_angle)
     p['pulse_shaping_chopper_1'] = {
-        'position': at_relative(nose['end'], nose['orientation'], (0.0306 * m) * z) - offset,
+        'position': at_relative(nose['end'], nose['orientation'], (0.0306 * m) * z) + spindle,
         'orientation': nose['orientation'],
         'radius': radius,
         'height': bunker_chopper_height,
         'angle': scalar(170., unit='deg'),
         'frequency': scalar(14., unit='Hz'),
         'delay': scalar(0., unit='s'),
-        'offset': offset,
+        'beam_angle': beam_angle,
     }
     p['pulse_shaping_chopper_2'] = {
         'position': at_relative_dict(p['pulse_shaping_chopper_1'], (0.049 * m) * z),
@@ -166,7 +171,7 @@ def primary_parameters(use_tcs=False):
         'angle': scalar(170., unit='deg'),
         'frequency': scalar(14., unit='Hz'),
         'delay': scalar(0., unit='s'),
-        'offset': offset,
+        'beam_angle': beam_angle,
     }
 
     # From BIFROST Table of Optics, ESS-4813238 the end of subsystem 1 to the start

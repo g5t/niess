@@ -178,14 +178,16 @@ def straight_guide_parameters(guide_pos, guide_rot, chopper_height) -> tuple[dic
     p.update(d)
 
     radius = 350 * mm
-    offset = -(radius - chopper_height / 2) * vector([0, 1.0, 0])
     chopper = {
         'radius': 350 * mm,
         'height': chopper_height,
         'angle': scalar(161.0, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0., unit='s'),
-        'offset': offset,
+        # The disc hangs above the beam, so the beam crosses at the bottom of it:
+        # half a turn from the zero mark, which sits on +y. That is enough to place
+        # it -- the gap centre is on the beam and the spindle follows.
+        'beam_angle': scalar(180., unit='deg'),
     }
 
     plexiglass = 'AcrylicGlass_C5O2H8'

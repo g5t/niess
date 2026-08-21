@@ -10,6 +10,7 @@ from pathlib import Path
 def main(outdir: Path) -> None:
     from mccode_antlr import Flavor
     from mccode_antlr.assembler import Assembler
+    from niess.components.chopper import disc_beam_offset
     from niess.teaching import Primary, teaching_parameters
 
     # --8<-- [start:direct]
@@ -24,6 +25,13 @@ def main(outdir: Path) -> None:
                     ('monitor', 7.46), ('sample_origin', 8.46)):
         calibration[name]['position'] = vector([0, 0, z], unit='m')
         calibration[name]['orientation'] = upright
+    # A disc chopper's position is its spindle, not the point the beam crosses it. The
+    # same function the chopper uses to find the beam from the spindle finds the spindle
+    # from the beam, negated -- so the survey stays a survey and the geometry stays in
+    # one place.
+    chopper = calibration['chopper']
+    calibration['chopper']['position'] -= disc_beam_offset(
+        chopper['radius'], chopper['height'], beam_angle=chopper['beam_angle'])
     for name, z in (('unit_1', 1.5), ('unit_2', 3.51)):
         calibration['guides'][name]['position'] = vector([0, 0, z], unit='m')
         calibration['guides'][name]['orientation'] = upright

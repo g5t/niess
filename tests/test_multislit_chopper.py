@@ -179,15 +179,45 @@ def test_a_straddling_opening_keeps_its_edge_beyond_360(assembled):
     assert float(str(last.get_parameter('theta_0').value)) == 20.0
 
 
-def test_the_offset_moves_the_whole_disc(assembled):
-    cal = calibration(offset=vector([0, -0.35, 0], unit='m'))
+def test_the_beam_crossing_moves_the_whole_disc(assembled):
+    """Every opening is one disc, so the beam crosses all of them in the same place."""
+    # 0.32 m below the spindle: `radius - height/2`, half a turn from the zero mark
+    cal = calibration(zero_angle=scalar(0.0, unit='deg'),
+                      beam_angle=scalar(180.0, unit='deg'))
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
     MultiSlitChopper.from_calibration(cal).to_mccode(
         assembler, at='origin', rotate='origin')
 
     for instance in instances(assembler.instrument):
-        assert [str(x) for x in instance.at_relative[0]] == ['0', '-0.35', '5']
+        # compared as numbers: the derived vector carries sin(180 deg) worth of x, which
+        # is 4e-17 m and is not worth pretending is a zero in the emitted text
+        assert [float(str(x)) for x in instance.at_relative[0]] == \
+            pytest.approx([0.0, -0.32, 5.0], abs=1e-12)
+
+
+def test_a_calibration_that_still_gives_an_offset_is_refused():
+    """A disc is placed by where the beam crosses it, and only by that."""
+    cal = calibration(offset=vector([0, -0.32, 0], unit='m'))
+    with pytest.raises(ValueError, match='placed by where the beam crosses it'):
+        MultiSlitChopper.from_calibration(cal)
+
+
+def test_the_offset_can_be_left_to_the_angles():
+    """Saying where the beam crosses the disc is enough to place it.
+
+    Both angles count, and they add: the mark sits 15 degrees from +y and the beam half a
+    turn from the mark, so the beam crosses 195 degrees round -- at radius 0.32 m, which
+    is `radius - height/2`, McStas' rule for centring the beam in the slit.
+    """
+    from math import cos, radians, sin
+    cal = calibration(beam_angle=scalar(180.0, unit='deg'))   # zero_angle stays at 15
+    cal.pop('offset', None)
+    disc = MultiSlitChopper.from_calibration(cal)
+
+    turn = radians(15.0 + 180.0)
+    assert disc.beam_offset().to(unit='m').value == pytest.approx(
+        [-0.32 * sin(turn), 0.32 * cos(turn), 0.0])
 
 
 # -- what it records ---------------------------------------------------------

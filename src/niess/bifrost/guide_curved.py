@@ -1,6 +1,7 @@
 from scipp import Variable, scalar
 
 from niess.spatial import at_relative_dict
+from ..components.chopper import disc_beam_offset
 
 def radius_of_curvature_to_rotation_angle(distance: Variable, radius_of_curvature: Variable) -> Variable:
     """
@@ -121,7 +122,7 @@ def curved_guide_partial_dict(ref_p, ref_r, radius, table, lengths, min_unit, ma
 
 def curved_guide_device_partial_dict(ref_p, ref_r, dev_name, dev_dict, table, pre_unit, post_unit, **consts):
     from scipp import vector
-    from .guide_tools import Desc, Type, parse_guide_table
+    from .guide_tools import Desc, Type, _device_position_offset, parse_guide_table
     from ..spatial import at_relative
     section = 0
     d = {}
@@ -150,8 +151,7 @@ def curved_guide_device_partial_dict(ref_p, ref_r, dev_name, dev_dict, table, pr
                     # For lack of better information, position the device in the
                     # center of the gap left for it:
                     half_p = at_relative(ref_p, ref_r, dist/2 * vector([0, 0, 1.]))
-                    if 'offset' in dev_dict:
-                        half_p -= dev_dict['offset']
+                    half_p = half_p - _device_position_offset(dev_dict)
                     d[dev_name] = {'position': half_p, 'orientation': ref_r}
                     d[dev_name].update(dev_dict)
             else:
@@ -347,16 +347,19 @@ def curved_guide_parameters(guide_start_vec, guide_start_rot, bunker_chopper_hei
     # then the first Frame Overlap Chopper
     device_gap = swissneutronics_37835_curved_section_table[11][1]
     radius = 350 * mm
-    offset = -(radius - bunker_chopper_height / 2) * y
+    # `position` is the spindle and the beam crosses below it, so the disc centre
+    # sits that far above the beam. One formula, shared with the chopper.
+    beam_angle = scalar(180., unit='deg')
+    spindle = -disc_beam_offset(radius, bunker_chopper_height, beam_angle=beam_angle)
     p['frame_overlap_chopper_1'] = {
-        'position': at_relative(last_p, last_r, device_gap/2 * z) - offset,
+        'position': at_relative(last_p, last_r, device_gap/2 * z) + spindle,
         'orientation': last_r,
         'radius': radius,
         'height': bunker_chopper_height,
         'angle': scalar(38.26, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0., unit='s'),
-        'offset': offset,
+        'beam_angle': beam_angle,
     }
 
     # And then a window before Unit 5
@@ -389,7 +392,7 @@ def curved_guide_parameters(guide_start_vec, guide_start_rot, bunker_chopper_hei
         'angle': scalar(52.01, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0., unit='s'),
-        'offset': offset,
+        'beam_angle': beam_angle,
     }
     section, last_p, last_r = curved_guide_device_partial_dict(
         last_p, last_r, 'frame_overlap_chopper_2', foc,
