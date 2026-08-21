@@ -14,6 +14,7 @@ everything downstream without any number being written twice.
 from scipp import scalar, vector
 from scipp.spatial import rotations_from_rotvecs
 
+from ..components.chopper import disc_beam_offset
 from ..spatial import at_relative
 
 #: Multiply a number by this to express it in millimetres, as drawings do.
@@ -93,11 +94,14 @@ def chopper_parameters(ref_p, ref_r):
     """
     at = at_relative(ref_p, ref_r, 250 * mm * z)
     # `position` is the spindle and the emitted AT is the beam crossing, so the disc
-    # centre goes above the beam by as much as `beam_angle` will bring it back down.
+    # centre sits above the beam by as much as `beam_angle` brings it back down. Same
+    # formula the chopper uses to go the other way, negated.
     radius, height = 350 * mm, 60 * mm
+    beam_angle = scalar(180.0, unit='deg')
+    spindle = -disc_beam_offset(radius, height, beam_angle=beam_angle)
     parameters = {
         'name': 'chopper',
-        'position': at + ((radius - height / 2) * vector([0, 1., 0])).to(unit='m'),
+        'position': at + spindle,
         'orientation': ref_r,
         'radius': radius,
         'angle': scalar(170.0, unit='deg'),
@@ -108,7 +112,7 @@ def chopper_parameters(ref_p, ref_r):
         # The disc hangs above the beam, so the beam crosses at the bottom of it: half a
         # turn from the zero mark, which sits on +y. That is enough to place it -- the
         # offset follows from the angles, the radius and the slit height.
-        'beam_angle': scalar(180., unit='deg'),
+        'beam_angle': beam_angle,
     }
     return parameters, at, ref_r
 
