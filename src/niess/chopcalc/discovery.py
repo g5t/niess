@@ -240,50 +240,40 @@ def _delay_expression(instance) -> str:
     return f'(({phase}) != 0 ? ({phase}) / (360.0 * fabs({nu})) : ({delay}))'
 
 
-def _envelope(group, places, path: float) -> tuple[ChopperEntry | None, Exclusion | None]:
-    """One conservative row for a multi-opening disc, from its provenance.
+def _single_windows(instance) -> tuple[tuple[str, str], ...]:
+    """The one opening of a plain ``DiskChopper``, centred on the path at its delay.
 
-    A disc's true acceptance is the *union* of its openings, and chopper-lib intersects
-    chopper acceptances -- so a row per opening would demand a neutron clear every one at
-    once, giving a band too narrow, the one failure that loses neutrons. The angular
-    envelope admits everything the disc admits plus the gaps between openings, so the
-    band can only come out too wide.
+    chopper-lib's own ``single_to_multi_chopper`` builds exactly this pair, so describing
+    a ``DiskChopper`` by its opening gives the row the same meaning it had when the
+    calculation took a width instead.
     """
-    name = group[0][1].extra['nexus_group_id']
-    members = tuple(instance.name for instance, _ in group)
+    theta = _parameter(instance, 'theta_0')
+    literal = _as_float(theta)
+    if literal is None:
+        # a run-time width: halve it in C rather than refuse the chopper
+        return ((f'-({theta}) / 2.0', f'({theta}) / 2.0'),)
+    return ((_c_double(-literal / 2.0), _c_double(literal / 2.0)),)
 
-    edges = [e for _, provenance in group for e in provenance.extra['slit_edges']]
-    width = max(edges) - min(edges)
-    centre = (max(edges) + min(edges)) / 2
+
+def _disc_windows(group) -> tuple[tuple[str, str], ...]:
+    """Every opening of a multi-opening disc, in chopper-lib's frame.
+
+    chopper-lib measures a window from the disc's zero-angle point and puts the edge at
+    angle ``a`` on the beam at ``delay + a / (360 * speed)``. niess measures a slit edge
+    from the top-dead-centre mark, and ``{disc}delay`` is when the disc's
+    ``beam_position`` is on the beam -- so ``beam_position`` *is* chopper-lib's zero-angle
+    point, and an edge ``e`` sits at ``beam_position - e``.
+
+    Subtracting is the whole of it. An opening counter-clockwise of the beam has to be
+    brought round by turning clockwise, so it lies at a negative angle in this frame, and
+    the pair reverses: the edge that opens last is the one nearest the zero point.
+    """
     beam = float(group[0][1].extra.get('beam_position', 0.0))
-    delay_parameter = group[0][1].extra['delay_parameter']
-    speed = str(_parameter(group[0][0], 'nu'))
-
-    logger.warning(
-        'niess.chopcalc: multi-opening disc %r (%s) is modelled as its %g degree '
-        'angular envelope, which admits the gaps between its openings too, so the band '
-        'comes out wider than the disc really passes. Revisit when chopper-lib grows a '
-        'multi_chopper_inverse_velocity_limits.',
-        name, ', '.join(members), width,
-    )
-    if width >= 360.0:
-        return None, Exclusion(
-            name=name, members=members,
-            reason=f'its openings span {width:g} degrees, a full revolution, so the '
-                   f'envelope constrains nothing',
-        )
-
-    turn = (beam - centre) % 360.0
-    delay = (
-        f'{delay_parameter}' if turn == 0 else
-        f'{delay_parameter} + ({speed} < 0 ? {_c_double(360.0 - turn)} : '
-        f'{_c_double(turn)}) / (360.0 * fabs({speed}))'
-    )
-    return ChopperEntry(
-        name=name, speed=speed, delay=delay,
-        angle=_c_double(width), path=_c_double(path),
-        note=f'{width:g} degree envelope of {len(members)} openings',
-    ), None
+    windows = []
+    for _, provenance in group:
+        opening, closing = provenance.extra['slit_edges']
+        windows.append((_c_double(beam - closing), _c_double(beam - opening)))
+    return tuple(windows)
 
 
 def _check_group(group) -> None:
@@ -378,12 +368,16 @@ def build_train(instrument, *, source=None, skip=(), path_lengths=None,
             except ChopcalcError as error:
                 excluded.append(Exclusion(instance.name, (instance.name,), str(error)))
                 continue
+        nslit = _as_float(_parameter(instance, 'nslit'), 1.0)
         rows.append(ChopperEntry(
             name=instance.name,
             speed=_speed_expression(instance),
             delay=_delay_expression(instance),
-            angle=_c_double(_as_float(_parameter(instance, 'theta_0'))),
+            windows=_single_windows(instance),
             path=_c_double(path),
+            note=None if nslit in (None, 1.0) else
+            f'{nslit:g} identical, evenly spaced openings, as one at {nslit:g}x the '
+            f'rotation frequency',
         ))
 
     for name, group in groups.items():
@@ -392,8 +386,15 @@ def build_train(instrument, *, source=None, skip=(), path_lengths=None,
         path = overrides.pop(name, None)
         if path is None:
             path = beam_path_length(graph, places, entry.name, group[0][0].name)
-        row, exclusion = _envelope(group, places, path)
-        (rows if row is not None else excluded).append(row or exclusion)
+        rows.append(ChopperEntry(
+            name=name,
+            speed=str(_parameter(group[0][0], 'nu')),
+            # every opening turns with the disc, so they share the disc's own delay;
+            # where each one sits relative to it is what the windows say
+            delay=str(group[0][1].extra['delay_parameter']),
+            windows=_disc_windows(group),
+            path=_c_double(path),
+        ))
 
     if overrides:
         raise ChopcalcError(

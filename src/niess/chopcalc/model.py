@@ -12,20 +12,24 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ChopperEntry:
-    """One row of the generated ``chopper_parameters`` array."""
+    """One row of the generated ``multi_chopper_parameters`` array."""
 
     name: str
-    """The instance name, or the disc's group id when this row is an envelope."""
+    """The instance name, or the disc's group id when several openings share a disc."""
     speed: str
     """Hz. The sign sets the direction of rotation, and is preserved."""
     delay: str
-    """Seconds, when an opening's centre is on the path."""
-    angle: str
-    """Degrees. **One** opening -- chopper-lib has no notion of several."""
+    """Seconds, when the disc's zero-angle point is on the path."""
+    windows: tuple[tuple[str, str], ...]
+    """Each opening as a ``(minimum, maximum)`` angle in degrees from the zero-angle
+    point. chopper-lib puts an edge at angle ``a`` on the beam at
+    ``delay + a / (360 * speed)``, so these are signed and the sign of ``speed`` decides
+    which edge of a pair is reached first. A plain ``DiskChopper`` has one window,
+    symmetric about zero -- which is what makes its row mean what it always meant."""
     path: str
     """Metres travelled from the source, along the beam."""
     note: str | None = None
-    """Why this row is approximate, when it is."""
+    """Anything worth saying about this row in the generated comment."""
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,23 @@ class Exclusion:
 
 
 @dataclass(frozen=True)
+class Export:
+    """Names the chopper train is published under, for components that take it.
+
+    The narrowing's own array is automatic and scoped to its block, which is what keeps
+    ``chopcalc_*`` from colliding with anything else in INITIALIZE. A component that takes
+    the train as a parameter needs it to outlive that block, so it gets a separate copy at
+    file scope: allocated in INITIALIZE, released in FINALLY.
+    """
+
+    choppers: str
+    """A ``multi_chopper_parameters *`` in DECLARE. Cast it at a component whose own
+    parameter is declared ``double *``."""
+    count: str
+    """An ``int`` in DECLARE, holding how many rows ``choppers`` points at."""
+
+
+@dataclass(frozen=True)
 class ChopperTrain:
     """Everything the calculation found.
 
@@ -61,3 +82,5 @@ class ChopperTrain:
     source: SourceEntry
     choppers: tuple[ChopperEntry, ...]
     excluded: tuple[Exclusion, ...]
+    export: Export | None = None
+    """Set when the train was also published for a component to read."""

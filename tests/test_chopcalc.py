@@ -95,7 +95,22 @@ def test_the_band_is_narrowed_through_the_sources_own_parameters(teaching):
 def test_a_chopper_is_named_not_valued(teaching):
     """The row references run-time parameters, so the band recomputes without a rebuild."""
     narrow_source_wavelengths(teaching)
-    assert '{chopperspeed, chopperdelay, 170.0,' in str(teaching.instrument)
+    assert 'chopcalc_choppers[0] = (multi_chopper_parameters){chopperspeed, ' \
+           'chopperdelay, 1,' in str(teaching.instrument)
+
+
+def test_a_single_opening_disc_is_one_window_either_side_of_zero(teaching):
+    """A DiskChopper opening is centred on the path at its delay, so its window is too.
+
+    chopper-lib's own ``single_to_multi_chopper`` builds exactly this pair out of a width,
+    which is what makes the multi-opening calculation give a plain disc the answer the
+    single-opening one used to give it.
+    """
+    train = narrow_source_wavelengths(teaching)
+    chopper = next(c for c in train.choppers if c.name == 'chopper')
+    assert chopper.windows == (('-85.0', '85.0'),)   # theta_0 = 170 degrees
+    assert 'chopcalc_choppers[0].windows[0] = (chopper_window){-85.0, 85.0};' \
+           in str(teaching.instrument)
 
 
 def test_every_chopper_is_found_however_deeply_it_is_nested(bifrost):
@@ -140,6 +155,9 @@ def test_evenly_spaced_openings_become_one_faster_chopper():
     assembler = one_chopper(nslit=3, theta_0=20.0)
     train = narrow_source_wavelengths(assembler)
     assert train.choppers[0].speed == '(chopperspeed) * 3.0'
+    # still one window: the substitution is in the speed, not in the openings
+    assert train.choppers[0].windows == (('-10.0', '10.0'),)
+    assert '3 identical, evenly spaced openings' in train.choppers[0].note
 
 
 def test_a_phase_is_turned_into_a_delay_the_way_diskchopper_does():
@@ -148,12 +166,17 @@ def test_a_phase_is_turned_into_a_delay_the_way_diskchopper_does():
     assert train.choppers[0].delay == '(45.0) / (360.0 * fabs(chopperspeed))'
 
 
-def test_the_include_is_guarded_against_chopper_lib_1(teaching):
-    """The struct did not change size when phase became delay, so only a guard catches it."""
+def test_the_include_is_guarded_against_an_older_chopper_lib(teaching):
+    """Neither meaning change altered a struct's size, so only a guard catches them.
+
+    2.0.0 turned the second field from a phase in degrees into a delay in seconds; 3.0.0
+    started placing a window angle with the signed speed. An older library compiles either
+    one cleanly and computes a different band.
+    """
     narrow_source_wavelengths(teaching)
     text = str(teaching.instrument)
     assert '%include "chopper-lib"' in text
-    assert 'CHOPPER_LIB_VERSION < 20000' in text
+    assert 'CHOPPER_LIB_VERSION < 30000' in text
     assert '#error' in text
 
 
@@ -168,13 +191,104 @@ def test_calling_it_twice_does_not_narrow_twice(teaching, caplog):
     with caplog.at_level(logging.WARNING):
         assert narrow_source_wavelengths(teaching) is None
     assert 'already been narrowed' in caplog.text
-    assert str(teaching.instrument).count('chopcalc_choppers[]') == 1
+    assert str(teaching.instrument).count(
+        'multi_chopper_parameters * chopcalc_choppers') == 1
+
+
+# -- publishing the train for a component to read -----------------------------
+
+def test_the_train_can_be_published_for_a_component_to_read(teaching):
+    """A component that takes the train needs it to outlive INITIALIZE.
+
+    The narrowing builds its array inside a braced block, which is what keeps its own
+    names from colliding with anything else in INITIALIZE -- and also means the array and
+    its window arrays are gone by the time any component runs. Publishing puts a copy at
+    file scope instead.
+    """
+    train = narrow_source_wavelengths(teaching, export_choppers='train', strict=True)
+    assert train.export.choppers == 'train'
+    assert train.export.count == 'train_count'
+
+    text = str(teaching.instrument)
+    assert 'multi_chopper_parameters * train = NULL;' in text
+    assert 'int train_count = 0;' in text
+    # the train is built on the heap either way, so handing it over is an assignment
+    assert 'train = chopcalc_choppers;' in text
+    assert 'train_count = 1;' in text
+    assert 'free(train);' in text
+    assert 'train = NULL;' in text
+
+
+def test_publishing_moves_the_release_rather_than_copying_the_train(teaching):
+    """The train is on the heap whether or not anything else reads it.
+
+    That is the point of building it there: publishing is then a pointer assignment, and
+    the release is the same few lines wherever it ends up. Without an export they run at
+    the end of INITIALIZE; with one they run in FINALLY, and nowhere else.
+    """
+    plain = narrow_source_wavelengths(teaching)
+    kept = str(teaching.instrument)
+
+    from mccode_antlr import Flavor
+    from mccode_antlr.assembler import Assembler
+    from niess.teaching import Primary
+    other = Assembler('teaching', flavor=Flavor.MCSTAS)
+    Primary.from_calibration().to_mccode(other)
+    narrow_source_wavelengths(other, export_choppers='train', strict=True)
+    published = str(other.instrument)
+
+    assert plain.export is None
+    # the same release, once each, on whichever name owns the train
+    release = 'free(chopcalc_choppers);'
+    assert kept.count(release) == 1
+    assert published.count(release) == 0
+    assert published.count('free(train);') == 1
+    # each row's openings go back before the row array, or they would leak with it
+    assert 'free(chopcalc_choppers[chopcalc_i].windows);' in kept
+    assert 'free(train[chopcalc_i].windows);' in published
+    # and nothing is copied to get there
+    assert 'windows[chopcalc_w]' not in published
+
+
+def test_the_count_can_be_named(teaching):
+    train = narrow_source_wavelengths(
+        teaching, export_choppers='train', export_chopper_count='how_many', strict=True)
+    assert train.export.count == 'how_many'
+    assert 'int how_many = 0;' in str(teaching.instrument)
+
+
+def test_nothing_is_published_unless_it_is_asked_for(teaching):
+    """The default stays a self-contained block: no DECLARE storage, no FINALLY."""
+    train = narrow_source_wavelengths(teaching)
+    assert train.export is None
+    text = str(teaching.instrument)
+    # the train itself is still a heap local; what is absent is file-scope storage for it
+    assert 'multi_chopper_parameters * chopcalc_choppers' in text
+    assert '= NULL;\nint ' not in text
+    assert 'FINALLY' not in text
+
+
+@pytest.mark.parametrize('names,complaint', [
+    ({'export_chopper_count': 'n'}, 'needs export_choppers'),
+    ({'export_choppers': 'not an identifier'}, 'not a C identifier'),
+    ({'export_choppers': 'chopcalc_choppers'}, 'reserved'),
+    ({'export_choppers': 'source_lambda_min'}, 'already an instrument parameter'),
+    ({'export_choppers': 'x', 'export_chopper_count': 'x'}, 'two different variables'),
+])
+def test_a_name_that_would_not_compile_is_refused(teaching, names, complaint):
+    """These become file-scope C, so a bad name is a compile error in generated code.
+
+    That is a much worse place to find out than here, where the message can say which
+    argument was wrong and why.
+    """
+    with pytest.raises(ChopcalcError, match=complaint):
+        narrow_source_wavelengths(teaching, strict=True, **names)
 
 
 # -- what the generated C does when it fails ---------------------------------
 
 def test_a_train_that_passes_nothing_leaves_the_band_alone(teaching):
-    """chopper_wavelength_limits leaves its outputs untouched on zero.
+    """multi_chopper_wavelength_limits leaves its outputs untouched on zero.
 
     Putting the band back makes that a property of this instrument rather than of
     whichever library version was resolved -- and keeps a degenerate band away from
@@ -182,7 +296,7 @@ def test_a_train_that_passes_nothing_leaves_the_band_alone(teaching):
     """
     narrow_source_wavelengths(teaching)
     text = str(teaching.instrument)
-    assert 'chopcalc_windows == 0' in text
+    assert 'chopcalc_bands == 0' in text
     assert 'source_lambda_min = chopcalc_min;' in text
 
 
@@ -286,35 +400,108 @@ def test_naming_a_component_that_does_not_exist_is_refused(caplog):
 
 # -- multi-slit discs --------------------------------------------------------
 
-def test_a_multi_slit_disc_becomes_one_conservative_envelope(caplog):
-    """A disc's acceptance is the union of its openings; chopper-lib intersects.
+def test_a_multi_slit_disc_becomes_one_row_per_opening(caplog):
+    """A disc is one chopper with several windows, not several choppers.
 
-    One row per opening would demand a neutron clear every opening at once, giving a band
-    too narrow -- the one failure that loses neutrons. The angular envelope admits the
-    gaps between openings too, so the band can only come out wider.
+    chopper-lib *intersects* the rows it is given, so a row per opening would demand a
+    neutron clear every opening at once -- a band too narrow, the one failure that loses
+    neutrons. One row carrying every window is the union the disc really is.
     """
     assembler = multi_slit([10.0, 30.0, 40.0, 60.0])
     with caplog.at_level(logging.WARNING):
         train = narrow_source_wavelengths(assembler)
     assert len(train.choppers) == 1
-    assert train.choppers[0].angle == '50.0'
-    # openings centred at 35 degrees, beam at 90, so 55 degrees of turning either way
-    assert '? 305.0 : 55.0' in train.choppers[0].delay
+    disc = train.choppers[0]
+    assert disc.name == 'pack'
+    assert len(disc.windows) == 2
+    # every opening shares the disc's own delay; the windows say where each one sits
+    assert disc.delay == 'packdelay'
 
 
-def test_a_disc_is_warned_about_once_however_many_openings_it_has(caplog):
-    assembler = multi_slit([10.0, 30.0, 40.0, 60.0])
+def test_an_opening_is_measured_from_the_beam_against_the_turn(caplog):
+    """chopper-lib puts an edge at angle ``a`` on the beam at ``delay + a/(360*speed)``.
+
+    niess measures a slit edge from the top-dead-centre mark and ``packdelay`` is when the
+    disc's ``beam_position`` is on the beam, so ``beam_position`` is chopper-lib's zero
+    angle and an edge ``e`` sits at ``beam_position - e``. Subtracting is the whole of it:
+    an opening counter-clockwise of the beam is reached by turning clockwise, so it lies
+    at a negative angle -- and the pair reverses, the edge that opens last coming first.
+    """
+    assembler = multi_slit([10.0, 30.0, 40.0, 60.0])   # beam_position is 90 degrees
     with caplog.at_level(logging.WARNING):
-        narrow_source_wavelengths(assembler)
-    assert caplog.text.count('multi-opening disc') == 1
-    assert 'multi_chopper_inverse_velocity_limits' in caplog.text
+        train = narrow_source_wavelengths(assembler)
+    assert train.choppers[0].windows == (('60.0', '80.0'), ('30.0', '50.0'))
 
 
-def test_a_disc_whose_openings_span_a_revolution_constrains_nothing(caplog):
+def test_the_windows_open_when_the_emitted_diskchoppers_open(caplog):
+    """The two descriptions of one disc have to agree, whichever way it turns.
+
+    ``MultiSlitChopper`` emits a GROUP of ``DiskChopper`` instances, each with a delay
+    worked out from how far the disc must turn to bring that opening round. chopcalc
+    describes the same disc to chopper-lib as angles instead. If they disagree, the band
+    is narrowed to something the instrument does not actually pass.
+    """
+    edges = [10.0, 30.0, 100.0, 140.0, 350.0, 370.0]
+    beam = 90.0
+    assembler = multi_slit(edges)
+    with caplog.at_level(logging.WARNING):
+        windows = narrow_source_wavelengths(assembler).choppers[0].windows
+
+    for speed in (14.0, -14.0, 196.0):
+        for delay in (0.0, 0.017):
+            period = 1.0 / abs(speed)
+
+            def centred(intervals):
+                """Opening centres and half-widths, modulo one turn."""
+                return sorted((((a + b) / 2) % period, (b - a) / 2) for a, b in intervals)
+
+            # what McStas sees: each opening's own delay, as MultiSlitChopper computes it
+            emitted = []
+            for opening, closing in zip(edges[::2], edges[1::2]):
+                turn = (beam - (opening + closing) / 2) % 360.0
+                centre = delay + ((360.0 - turn) if speed < 0 else turn) / (360.0 * abs(speed))
+                half = (closing - opening) / 2 / 360.0 / abs(speed)
+                emitted.append((centre - half, centre + half))
+
+            # what chopper-lib sees: an angle, placed with the signed speed
+            described = []
+            for low, high in windows:
+                a = delay + float(low) / 360.0 / speed
+                b = delay + float(high) / 360.0 / speed
+                described.append((min(a, b), max(a, b)))
+
+            for (want_c, want_h), (got_c, got_h) in zip(centred(emitted), centred(described)):
+                assert want_c == pytest.approx(got_c, abs=1e-12)
+                assert want_h == pytest.approx(got_h, abs=1e-12)
+
+
+def test_a_disc_whose_openings_span_a_revolution_still_constrains(caplog):
+    """Openings reaching right round the disc are not the same as no disc at all.
+
+    Modelled as one angular envelope this disc covered a whole revolution and so admitted
+    everything, which is why it used to be dropped. Its openings are 20, 40 and 20 degrees
+    wide -- 80 of 360 -- and describing them individually gets that back.
+    """
     assembler = multi_slit(EDGES)
     with caplog.at_level(logging.WARNING):
-        assert narrow_source_wavelengths(assembler) is None
-    assert 'full revolution' in caplog.text
+        train = narrow_source_wavelengths(assembler)
+    assert train is not None
+    assert len(train.choppers) == 1
+    assert len(train.choppers[0].windows) == 3
+    assert not train.excluded
+    assert 'full revolution' not in caplog.text
+
+
+def test_a_multi_opening_disc_is_no_longer_approximated(caplog):
+    """It used to warn that the band came out wider than the disc really passes."""
+    assembler = multi_slit(EDGES)
+    with caplog.at_level(logging.WARNING):
+        train = narrow_source_wavelengths(assembler)
+    assert train.choppers[0].note is None
+    assert 'envelope' not in caplog.text
+    # 'envelope' survives only where it still means something: several separate bands
+    # reported as the range that spans them, which is a different thing entirely
+    assert 'envelope of' not in str(assembler.instrument)
 
 
 def test_a_grouped_chopper_without_provenance_is_left_out(caplog):
@@ -339,4 +526,4 @@ def test_the_caller_is_told_what_was_used_and_what_was_not(caplog):
     train = narrow_source_wavelengths(assembler)
     assert train.source.name == 'source'
     assert train.choppers[0].name == 'pack'
-    assert 'envelope' in train.choppers[0].note
+    assert len(train.choppers[0].windows) == 2
