@@ -62,28 +62,40 @@ conservative rather than wrong:
 
 | left out | because |
 | --- | --- |
-| a disc in a McStas `GROUP` with no niess provenance | grouped discs are alternatives, not a series, and there is nothing to reconstruct an envelope from |
-| a Fermi chopper | chopper-lib's `chopper_parameters` cannot describe one |
+| a disc in a McStas `GROUP` with no niess provenance | grouped discs are alternatives, not a series, and there are no slit edges to describe them with |
+| a Fermi chopper | chopper-lib has no row shape that describes one |
 | a disc whose speed, opening or delay is unset | there is no row to write |
-
-A **multi-slit disc** is not left out but approximated. chopper-lib intersects chopper
-acceptances, while a disc's openings are alternatives — so one row per opening would demand
-a neutron clear every opening at once, giving a band too narrow, which is the one failure
-that loses neutrons. `chopcalc` uses the disc's angular envelope instead, spanning its
-first opening's edge to its last. That admits the gaps between openings too, so the band
-comes out wider than the disc really passes, and it warns every time:
-
-```
-niess.chopcalc: multi-opening disc 'pack' (pack_slit_0, pack_slit_1) is modelled as its
-50 degree angular envelope, ... Revisit when chopper-lib grows a
-multi_chopper_inverse_velocity_limits.
-```
-
-A disc whose openings span a full revolution constrains nothing and is dropped outright.
 
 One case stops the calculation altogether rather than approximating it: a chopper with
 `isfirst=1` re-times neutrons instead of absorbing them, so every downstream delay is
 measured from a different zero and the chopper-train model does not apply.
+
+## Discs with several openings
+
+Every disc is described to chopper-lib by its **openings**, as a
+`multi_chopper_parameters` row pointing at an array of window angles. A plain
+`DiskChopper` has one window, symmetric about zero — the same thing its single opening
+always meant — and a `MultiSlitChopper` has one per slit.
+
+The angles are measured from the point of the disc that its `delay` refers to, and
+chopper-lib puts an edge at angle `a` on the beam at `delay + a / (360 * speed)`. niess
+measures a slit edge from the top-dead-centre mark and `{disc}delay` is when the disc's
+`beam_position` is on the beam, so an edge `e` is emitted at `beam_position - e`.
+Subtracting is the whole of the conversion: an opening counter-clockwise of the beam is
+reached by turning clockwise, so it sits at a negative angle.
+
+The `speed` keeps its sign, and chopper-lib uses it signed here — reversing a disc
+reflects its openings about the delay. That is invisible for a single opening centred on
+zero and matters for every other one, which is why `chopper-lib` 3.0.0 is the minimum and
+the generated C `#error`s against anything older.
+
+Before chopper-lib could take several openings, a multi-opening disc was approximated by
+its angular envelope — the span from its first opening's edge to its last — which admitted
+the gaps between openings too. That is gone. A disc whose openings reach right round the
+disc used to be dropped outright, because its envelope covered a full revolution and so
+constrained nothing; described by its openings it constrains properly. For the three-slit
+disc in the test suite, 20, 40 and 20 degrees wide, that is the difference between
+narrowing 0.75–30 Å to nothing at all and narrowing it to 2.20–13.08 Å.
 
 ## Flight paths
 
