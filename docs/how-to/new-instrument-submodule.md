@@ -183,8 +183,8 @@ serve McStas and NeXus:
 
 | | |
 | --- | --- |
-| `top_dead_center` | where the disc's reference mark sits, as an angle from the local **+y** axis |
-| `beam_position` | where the beam crosses the disc, as an angle from that mark |
+| `zero_angle` | where the disc's reference mark sits, as an angle from the local **+y** axis (`top_dead_center` in `NXdisk_chopper`, and accepted under that name) |
+| `beam_angle` | where the beam crosses the disc, as an angle from that mark — **180** for a disc that hangs above the beam (`beam_position` in `NXdisk_chopper`) |
 | `windows` | the angular edges of the openings, measured from the mark |
 
 Every angle is positive counter-clockwise viewed facing **+z** — looking downstream —

@@ -45,8 +45,20 @@ fixed numbers.
 
 | niess class | emits | calibration keys |
 | --- | --- | --- |
-| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `offset` |
-| `MultiSlitChopper` | one `DiskChopper` **per opening** | as `DiscChopper`, plus `top_dead_center` and `beam_position`, with `windows` holding two edges per opening |
+| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `zero_angle`, `beam_angle`, `offset` |
+| `MultiSlitChopper` | one `DiskChopper` **per opening** | as `DiscChopper`, with `windows` holding two edges per opening |
+
+A disc chopper's `position` is its **spindle**; the emitted `AT` is the point the beam
+crosses the disc. `zero_angle` and `beam_angle` say where that point is — measured
+counter-clockwise about +z, the first from the local +y axis to the disc's zero mark and
+the second from the mark to the beam — and the vector between the two follows from them,
+along with the rotation the emitted component carries so the disc ends up on the correct
+side of the beam. Both default to zero, which puts the beam at the top of the disc; a disc
+hanging above the beam has `beam_angle = 180`.
+
+`offset` may still be given, and is then checked against the angles rather than believed:
+only one of the two can be right, and a disc chopper placed off the beam absorbs every
+neutron without saying so.
 
 `DiscChopper` declares `{name}speed` and `{name}delay` as instrument parameters, and
 accepts a single opening only. A disc whose openings are neither identical nor evenly

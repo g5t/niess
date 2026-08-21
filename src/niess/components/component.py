@@ -118,6 +118,30 @@ class Component(Base, kw_only=True):
     def __mccode_extra__(self) -> dict[str, Any]:
         return {}
 
+    def __mccode_offset__(self) -> Variable:
+        """Displacement from ``position`` to the point the emitted ``AT`` sits on.
+
+        ``position`` is where the component *is*; a McCode component's origin is not
+        always the same point -- a disc chopper's is on the beam while its position is the
+        spindle -- so this is what converts between them. Zero unless a subclass says
+        otherwise.
+        """
+        from scipp import vector
+        offset = getattr(self, 'offset', None)
+        if offset is not None:
+            return offset
+        # in `position`'s own unit: a calibration may measure in mm, and scipp will not
+        # add a length in metres to one in millimetres
+        return vector([0., 0., 0.], unit=self.position.unit)
+
+    def __mccode_orientation__(self) -> Variable:
+        """The rotation the emitted ``ROTATED`` carries.
+
+        ``orientation`` unless a subclass needs the emitted component turned relative to
+        the object it describes.
+        """
+        return self.orientation
+
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
@@ -141,11 +165,8 @@ class Component(Base, kw_only=True):
         # Variable the calibration dictionary holds, so `+=` would shift both this
         # component and the calibration it came from -- accumulating another offset
         # on every subsequent build from the same data.
-        at = self.position
-        if hasattr(self, 'offset'):
-            at = at + getattr(self, 'offset')
-        at = (at.to(unit='m').value, at_rel)
-        rot = (mccode_ordered_angles(self.orientation), rot_rel)
+        at = ((self.position + self.__mccode_offset__()).to(unit='m').value, at_rel)
+        rot = (mccode_ordered_angles(self.__mccode_orientation__()), rot_rel)
 
         instance = assembler.component(self.name, comp, at=at, rotate=rot, parameters=pars)
         if insert_provenance_metadata:

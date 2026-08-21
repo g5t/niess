@@ -357,6 +357,9 @@ def curved_guide_parameters(guide_start_vec, guide_start_rot, bunker_chopper_hei
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0., unit='s'),
         'offset': offset,
+        # The disc hangs above the beam, so the beam crosses at the bottom of it:
+        # half a turn from the zero mark, which sits on +y.
+        'beam_angle': scalar(180., unit='deg'),
     }
 
     # And then a window before Unit 5
@@ -390,6 +393,9 @@ def curved_guide_parameters(guide_start_vec, guide_start_rot, bunker_chopper_hei
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0., unit='s'),
         'offset': offset,
+        # The disc hangs above the beam, so the beam crosses at the bottom of it:
+        # half a turn from the zero mark, which sits on +y.
+        'beam_angle': scalar(180., unit='deg'),
     }
     section, last_p, last_r = curved_guide_device_partial_dict(
         last_p, last_r, 'frame_overlap_chopper_2', foc,

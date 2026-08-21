@@ -186,6 +186,9 @@ def straight_guide_parameters(guide_pos, guide_rot, chopper_height) -> tuple[dic
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0., unit='s'),
         'offset': offset,
+        # The disc hangs above the beam, so the beam crosses at the bottom of it:
+        # half a turn from the zero mark, which sits on +y.
+        'beam_angle': scalar(180., unit='deg'),
     }
 
     plexiglass = 'AcrylicGlass_C5O2H8'

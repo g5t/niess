@@ -24,6 +24,10 @@ def main(outdir: Path) -> None:
                     ('monitor', 7.46), ('sample_origin', 8.46)):
         calibration[name]['position'] = vector([0, 0, z], unit='m')
         calibration[name]['orientation'] = upright
+    # A disc chopper's position is its spindle, not the point the beam crosses it: the
+    # disc hangs above the beam by `radius - height/2`, and `beam_angle` brings the
+    # opening back down to meet it.
+    calibration['chopper']['position'] += vector([0, 0.35 - 0.06 / 2, 0], unit='m')
     for name, z in (('unit_1', 1.5), ('unit_2', 3.51)):
         calibration['guides'][name]['position'] = vector([0, 0, z], unit='m')
         calibration['guides'][name]['orientation'] = upright

@@ -198,9 +198,20 @@ def _arrival_turn(places, route) -> float | None:
     BIFROST chopper measures 0.0000 degrees here while a disc placed at its spindle
     rather than at the beam measures several.
     """
-    if len(route) < 3:
+    # The last three *distinct* places, not the last three nodes: components sharing a
+    # position -- the openings of one multi-slit disc, or a reference frame sitting on
+    # the thing it places -- contribute segments of no length and no direction, and
+    # taking those as the arrival would silence the check rather than answer it.
+    distinct = []
+    for name in reversed(route):
+        place = places[name]
+        if not distinct or dist(place, distinct[-1]) > 0:
+            distinct.append(place)
+        if len(distinct) == 3:
+            break
+    if len(distinct) < 3:
         return None
-    before, at, after = (places[n] for n in route[-3:])
+    after, at, before = distinct
     first = [b - a for a, b in zip(before, at)]
     second = [b - a for a, b in zip(at, after)]
     lengths = dist((0, 0, 0), first) * dist((0, 0, 0), second)

@@ -92,18 +92,23 @@ def chopper_parameters(ref_p, ref_r):
     NeXus output as links to an ``NXlog`` rather than as fixed numbers.
     """
     at = at_relative(ref_p, ref_r, 250 * mm * z)
+    # `position` is the spindle and the emitted AT is the beam crossing, so the disc
+    # centre goes above the beam by as much as `beam_angle` will bring it back down.
+    radius, height = 350 * mm, 60 * mm
     parameters = {
         'name': 'chopper',
-        'position': at,
+        'position': at + ((radius - height / 2) * vector([0, 1., 0])).to(unit='m'),
         'orientation': ref_r,
-        'radius': 350 * mm,
+        'radius': radius,
         'angle': scalar(170.0, unit='deg'),
         'frequency': scalar(14.0, unit='Hz'),
         'delay': scalar(0.0, unit='s'),
-        'height': 60 * mm,
+        'height': height,
         'width': 40 * mm,
-        # The disc centre sits above the beam; Component.to_mccode adds this offset
-        'offset': vector([0, -0.35, 0], unit='m'),
+        # The disc hangs above the beam, so the beam crosses at the bottom of it: half a
+        # turn from the zero mark, which sits on +y. That is enough to place it -- the
+        # offset follows from the angles, the radius and the slit height.
+        'beam_angle': scalar(180., unit='deg'),
     }
     return parameters, at, ref_r
 

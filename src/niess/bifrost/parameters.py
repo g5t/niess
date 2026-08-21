@@ -157,6 +157,9 @@ def primary_parameters(use_tcs=False):
         'frequency': scalar(14., unit='Hz'),
         'delay': scalar(0., unit='s'),
         'offset': offset,
+        # The disc hangs above the beam, so the beam crosses at the bottom of it:
+        # half a turn from the zero mark, which sits on +y.
+        'beam_angle': scalar(180., unit='deg'),
     }
     p['pulse_shaping_chopper_2'] = {
         'position': at_relative_dict(p['pulse_shaping_chopper_1'], (0.049 * m) * z),
@@ -167,6 +170,9 @@ def primary_parameters(use_tcs=False):
         'frequency': scalar(14., unit='Hz'),
         'delay': scalar(0., unit='s'),
         'offset': offset,
+        # The disc hangs above the beam, so the beam crosses at the bottom of it:
+        # half a turn from the zero mark, which sits on +y.
+        'beam_angle': scalar(180., unit='deg'),
     }
 
     # From BIFROST Table of Optics, ESS-4813238 the end of subsystem 1 to the start
