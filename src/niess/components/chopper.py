@@ -32,27 +32,6 @@ class DiscChopper(Chopper):
         # TODO verify the sense of this wrt the McStas definition
         return dot(vector(value=[0, 0, 1.]), self.velocity).to(unit='Hz')
 
-    def chopper_lib_parameters(self):
-        """Useful for specifying elements of a vector used by chopper-lib
-
-        :mod:`niess.chopcalc` is the maintained path: it reads the emitted instrument
-        rather than a calibration, so it finds choppers nested inside sections, measures
-        flight paths along the beam, and handles discs this method refuses.
-
-
-        The fields are ``{speed, delay, angle, path}``, which chopper-lib 2.0.0 and newer
-        take; before that the second was a phase in degrees. Both run-time knobs are
-        named rather than valued, so the train is recalculated whenever they change.
-        """
-        from scipp import max, min, norm
-        speed_name = f'{self.name}speed'
-        delay_name = f'{self.name}delay'
-        if self.windows.size != 2:
-            raise ValueError("chopper-lib expects only one window")
-        angle = (max(self.windows) - min(self.windows)).to(unit='deg').value
-        distance = norm(self.position).to(unit='m').value
-        return '{' + f'{speed_name}, {delay_name}, {angle}, {distance}' + '}'
-
     @classmethod
     def from_calibration(cls, cal: dict):
         from scipp import scalar, array, vector
