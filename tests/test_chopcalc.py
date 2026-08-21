@@ -192,6 +192,78 @@ def test_calling_it_twice_does_not_narrow_twice(teaching, caplog):
     assert str(teaching.instrument).count('chopcalc_choppers[]') == 1
 
 
+# -- publishing the train for a component to read -----------------------------
+
+def test_the_train_can_be_published_for_a_component_to_read(teaching):
+    """A component that takes the train needs it to outlive INITIALIZE.
+
+    The narrowing builds its array inside a braced block, which is what keeps its own
+    names from colliding with anything else in INITIALIZE -- and also means the array and
+    its window arrays are gone by the time any component runs. Publishing puts a copy at
+    file scope instead.
+    """
+    train = narrow_source_wavelengths(teaching, export_choppers='train', strict=True)
+    assert train.export.choppers == 'train'
+    assert train.export.count == 'train_count'
+
+    text = str(teaching.instrument)
+    assert 'multi_chopper_parameters * train = NULL;' in text
+    assert 'int train_count = 0;' in text
+    assert 'train = (multi_chopper_parameters *) calloc(' in text
+    assert 'free(train);' in text
+    assert 'train = NULL;' in text
+
+
+def test_the_published_copy_is_a_deep_one(teaching):
+    """A row points at its window array rather than carrying it.
+
+    Both are automatic in the block that builds them, so copying the rows alone would
+    leave every ``windows`` pointing into a dead frame -- which reads back plausibly for a
+    while and shows up as a wrong band somewhere else entirely.
+    """
+    narrow_source_wavelengths(teaching, export_choppers='train', strict=True)
+    text = str(teaching.instrument)
+    # each row gets its own windows...
+    assert 'train[chopcalc_i].windows = (chopper_window *) calloc(' in text
+    # ...copied element by element...
+    assert 'train[chopcalc_i].windows[chopcalc_w] =' in text
+    # ...and freed one row at a time, or the window arrays would leak
+    assert 'free(train[chopcalc_i].windows);' in text
+
+
+def test_the_count_can_be_named(teaching):
+    train = narrow_source_wavelengths(
+        teaching, export_choppers='train', export_chopper_count='how_many', strict=True)
+    assert train.export.count == 'how_many'
+    assert 'int how_many = 0;' in str(teaching.instrument)
+
+
+def test_nothing_is_published_unless_it_is_asked_for(teaching):
+    """The default stays a self-contained block: no DECLARE storage, no FINALLY."""
+    train = narrow_source_wavelengths(teaching)
+    assert train.export is None
+    text = str(teaching.instrument)
+    assert 'multi_chopper_parameters *' not in text
+    assert 'FINALLY' not in text
+
+
+@pytest.mark.parametrize('names,complaint', [
+    ({'export_chopper_count': 'n'}, 'needs export_choppers'),
+    ({'export_choppers': 'not an identifier'}, 'not a C identifier'),
+    ({'export_choppers': 'chopcalc_choppers'}, 'reserved'),
+    ({'export_choppers': 'source_lambda_min'}, 'already an instrument parameter'),
+    ({'export_choppers': 'x', 'export_chopper_count': 'x'}, 'two different variables'),
+])
+def test_a_name_that_would_not_compile_is_refused(teaching, names, complaint):
+    """These become file-scope C, so a bad name is a compile error in generated code.
+
+    That is a much worse place to find out than here, where the message can say which
+    argument was wrong and why.
+    """
+    with pytest.raises(ChopcalcError, match=complaint):
+        narrow_source_wavelengths(teaching, strict=True, **names)
+
+
 # -- what the generated C does when it fails ---------------------------------
 
 def test_a_train_that_passes_nothing_leaves_the_band_alone(teaching):

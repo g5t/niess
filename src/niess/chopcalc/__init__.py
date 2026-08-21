@@ -17,10 +17,16 @@ from __future__ import annotations
 
 import logging
 
+import dataclasses
+import re
+
 from .discovery import ChopcalcError, build_train
 from .emit import (CHOPPER_LIB_REGISTRY, already_emitted, declare_text,
-                   include_present, initialize_text)
-from .model import ChopperEntry, ChopperTrain, Exclusion, SourceEntry
+                   export_declare_text, finalize_text, include_present,
+                   initialize_text)
+from .model import ChopperEntry, ChopperTrain, Exclusion, Export, SourceEntry
+
+C_IDENTIFIER = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ __all__ = [
     'ChopperEntry',
     'ChopperTrain',
     'Exclusion',
+    'Export',
     'SourceEntry',
     'narrow_source_wavelengths',
 ]
@@ -41,6 +48,8 @@ def narrow_source_wavelengths(
         skip=(),
         path_lengths=None,
         latest_emission: float | None = None,
+        export_choppers: str | None = None,
+        export_chopper_count: str | None = None,
         registry: str = CHOPPER_LIB_REGISTRY,
         strict: bool = False,
 ) -> ChopperTrain | None:
@@ -65,8 +74,19 @@ def narrow_source_wavelengths(
         Seconds after t=0 that the source can still emit. Taken from the source when it
         says (``tmax_multiplier``); a longer time widens the band, which is the safe
         direction.
+    export_choppers:
+        Publish the train under this name as well, as a ``multi_chopper_parameters *`` in
+        DECLARE, for a component that takes the train as a parameter. Allocated in
+        INITIALIZE and freed in FINALLY. Without it the train is built, used and thrown
+        away inside one braced block in INITIALIZE, which is what keeps its own names from
+        colliding with anything else there.
+    export_chopper_count:
+        The ``int`` in DECLARE holding how many rows were published. Defaults to
+        ``f'{export_choppers}_count'``.
     strict:
-        Raise :class:`ChopcalcError` instead of warning and doing nothing.
+        Raise :class:`ChopcalcError` instead of warning and doing nothing. Worth passing
+        alongside ``export_choppers``: a component that reads the train needs it to exist,
+        and the default is to warn and emit nothing.
 
     Returns
     -------
@@ -88,10 +108,12 @@ def narrow_source_wavelengths(
                        'narrow_source_wavelengths twice would apply two bands', strict)
 
     try:
+        export = _export_names(instrument, export_choppers, export_chopper_count)
         train = build_train(instrument, source=source, skip=skip,
                             path_lengths=path_lengths, latest_emission=latest_emission)
     except ChopcalcError as error:
         return _refuse(str(error), strict)
+    train = dataclasses.replace(train, export=export)
 
     for exclusion in train.excluded:
         logger.warning('niess.chopcalc: leaving out %s -- %s',
@@ -106,13 +128,55 @@ def narrow_source_wavelengths(
     ensure_registry(assembler, registry)
     if not include_present(instrument):
         assembler.declare(declare_text())
+    if export is not None:
+        assembler.declare(export_declare_text(export))
     assembler.initialize(initialize_text(train))
+    if export is not None:
+        assembler.final(finalize_text(export))
     logger.info(
         'niess.chopcalc: %d chopper(s) narrowing %s/%s of source %r',
         len(train.choppers), train.source.lambda_min, train.source.lambda_max,
         train.source.name,
     )
     return train
+
+
+def _export_names(instrument, choppers: str | None, count: str | None) -> Export | None:
+    """Check the names a caller wants the train published under.
+
+    They become file-scope C, so a name that is not an identifier, or is already taken by
+    an instrument parameter, is a compile error in generated code -- which is a much worse
+    place to find out than here.
+    """
+    if choppers is None:
+        if count is not None:
+            raise ChopcalcError(
+                'export_chopper_count names the count of a published train, so it needs '
+                'export_choppers to say what to publish'
+            )
+        return None
+    count = count if count is not None else f'{choppers}_count'
+    for name, argument in ((choppers, 'export_choppers'), (count, 'export_chopper_count')):
+        if not C_IDENTIFIER.match(name):
+            raise ChopcalcError(
+                f'{argument}={name!r} is not a C identifier, and it is declared as one'
+            )
+        if name.startswith('chopcalc_'):
+            raise ChopcalcError(
+                f'{argument}={name!r} starts with chopcalc_, which is reserved for the '
+                f'locals this generates; pick another name'
+            )
+        if instrument.get_parameter(name) is not None:
+            raise ChopcalcError(
+                f'{argument}={name!r} is already an instrument parameter, so declaring it '
+                f'again would not compile'
+            )
+    if choppers == count:
+        raise ChopcalcError(
+            f'export_choppers and export_chopper_count are both {choppers!r}; they are '
+            f'two different variables'
+        )
+    return Export(choppers=choppers, count=count)
 
 
 def _refuse(message: str, strict: bool) -> None:

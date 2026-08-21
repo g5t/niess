@@ -56,6 +56,23 @@ class Exclusion:
 
 
 @dataclass(frozen=True)
+class Export:
+    """Names the chopper train is published under, for components that take it.
+
+    The narrowing's own array is automatic and scoped to its block, which is what keeps
+    ``chopcalc_*`` from colliding with anything else in INITIALIZE. A component that takes
+    the train as a parameter needs it to outlive that block, so it gets a separate copy at
+    file scope: allocated in INITIALIZE, released in FINALLY.
+    """
+
+    choppers: str
+    """A ``multi_chopper_parameters *`` in DECLARE. Cast it at a component whose own
+    parameter is declared ``double *``."""
+    count: str
+    """An ``int`` in DECLARE, holding how many rows ``choppers`` points at."""
+
+
+@dataclass(frozen=True)
 class ChopperTrain:
     """Everything the calculation found.
 
@@ -65,3 +82,5 @@ class ChopperTrain:
     source: SourceEntry
     choppers: tuple[ChopperEntry, ...]
     excluded: tuple[Exclusion, ...]
+    export: Export | None = None
+    """Set when the train was also published for a component to read."""

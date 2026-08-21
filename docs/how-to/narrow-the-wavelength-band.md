@@ -70,6 +70,44 @@ One case stops the calculation altogether rather than approximating it: a choppe
 `isfirst=1` re-times neutrons instead of absorbing them, so every downstream delay is
 measured from a different zero and the chopper-train model does not apply.
 
+## Handing the train to a component
+
+The narrowing builds its array inside a braced block in INITIALIZE. That is what keeps
+`chopcalc_*` from colliding with anything else there, and it also means the array — and
+the window arrays its rows point at — are gone before any component initialises.
+
+A component that takes the train as a parameter needs it to last longer than that. Ask
+for it by name:
+
+```python
+train = narrow_source_wavelengths(
+    assembler, export_choppers='bifrost_choppers', strict=True)
+```
+
+which adds to DECLARE
+
+```c
+multi_chopper_parameters * bifrost_choppers = NULL;
+int bifrost_choppers_count = 0;
+```
+
+fills them from a deep copy at the end of the narrowing, and frees them in FINALLY. The
+count name defaults to `f'{export_choppers}_count'`; pass `export_chopper_count=` to
+choose it. Both are reported back on `train.export`.
+
+The copy is deep because a row *points at* its window array rather than carrying it, and
+both are automatic in the block that built them — copying the rows alone would leave every
+`windows` pointing into a dead frame. FINALLY frees each row's windows before the row
+array, or those would leak.
+
+Pass `(double *) bifrost_choppers` to a component whose own parameter is declared that
+way, which is the usual shape for handing a struct array through McStas.
+
+`strict=True` is worth pairing with this. The default when a band cannot be worked out is
+to warn and emit nothing, which for the narrowing alone is safe — the instrument just
+samples the band it was given. A component that reads the train instead gets a NULL
+pointer and a count of zero, so you want the exception.
+
 ## Discs with several openings
 
 Every disc is described to chopper-lib by its **openings**, as a

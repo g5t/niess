@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from textwrap import indent
 
-from .model import ChopperTrain
+from .model import ChopperTrain, Export
 
 CHOPPER_LIB_REGISTRY = 'mcdotstar/mcstas-chopper-lib@v3.0.0'
 CHOPPER_LIB_MINIMUM_VERSION = 30000
@@ -31,6 +31,24 @@ def declare_text() -> str:
     return DECLARE_TEXT
 
 
+def export_declare_text(export: Export) -> str:
+    """File-scope storage for a train a component reads.
+
+    Declared here and filled in INITIALIZE rather than initialised in place: a row names
+    instrument parameters, which are not constant expressions, so it cannot be a static
+    initialiser.
+    """
+    return f"""
+/* niess.chopcalc: the chopper train, for components that take it as a parameter.
+ * Filled in INITIALIZE and released in FINALLY, so it is valid for the whole run --
+ * which the narrowing's own array is not, being scoped to its block. Pass
+ * (double *) {export.choppers} to a component whose parameter is declared that way.
+ */
+multi_chopper_parameters * {export.choppers} = NULL;
+int {export.count} = 0;
+"""
+
+
 def initialize_text(train: ChopperTrain) -> str:
     """The whole calculation, as one braced compound statement.
 
@@ -56,10 +74,15 @@ def initialize_text(train: ChopperTrain) -> str:
         for i, c in enumerate(train.choppers)
     )
 
+    published = '' if train.export is None else _publish(train.export)
+
     notes = [
         f'{len(train.choppers)} chopper{"" if len(train.choppers) == 1 else "s"} '
         f'considered, path lengths walked along the beam from {source.name!r}.',
     ]
+    if train.export is not None:
+        notes.append(f'Also published as {train.export.choppers} / {train.export.count}, '
+                     f'for a component that reads the train.')
     for chopper in (c for c in train.choppers if c.note):
         notes.append(f'{chopper.name}: {chopper.note}.')
     for exclusion in train.excluded:
@@ -106,9 +129,60 @@ def initialize_text(train: ChopperTrain) -> str:
     MPI_MASTER(printf("niess.chopcalc: sampling %g to %g AA instead of %g to %g AA.\\n",
       {source.lambda_min}, {source.lambda_max}, chopcalc_min, chopcalc_max););
   }}
-}}
+{published}}}
 '''
     return body
+
+
+def _publish(export: Export) -> str:
+    """Copy the train to storage that outlives the block it was built in.
+
+    A deep copy, because a row points at its window array rather than carrying it, and
+    both are automatic here. Copying the rows alone would leave every ``windows`` pointing
+    into a dead frame -- which reads back plausibly for a while, and is the sort of thing
+    that shows up as a wrong band on someone else's machine.
+    """
+    return f'''
+  /* publish the train, for a component that takes it as a parameter */
+  {export.count} = (int)(sizeof({ARRAY_MARKER}) / sizeof(multi_chopper_parameters));
+  {export.choppers} = (multi_chopper_parameters *) calloc(
+    (size_t) {export.count}, sizeof(multi_chopper_parameters));
+  if ({export.choppers} == NULL) {{
+    printf("niess.chopcalc: out of memory publishing {export.choppers}\\n");
+    exit(-1);
+  }}
+  for (int chopcalc_i = 0; chopcalc_i < {export.count}; ++chopcalc_i) {{
+    {export.choppers}[chopcalc_i] = {ARRAY_MARKER}[chopcalc_i];
+    {export.choppers}[chopcalc_i].windows = (chopper_window *) calloc(
+      (size_t) {ARRAY_MARKER}[chopcalc_i].window_count, sizeof(chopper_window));
+    if ({export.choppers}[chopcalc_i].windows == NULL) {{
+      printf("niess.chopcalc: out of memory publishing {export.choppers}\\n");
+      exit(-1);
+    }}
+    for (unsigned chopcalc_w = 0;
+         chopcalc_w < {ARRAY_MARKER}[chopcalc_i].window_count; ++chopcalc_w) {{
+      {export.choppers}[chopcalc_i].windows[chopcalc_w] =
+        {ARRAY_MARKER}[chopcalc_i].windows[chopcalc_w];
+    }}
+  }}
+'''
+
+
+def finalize_text(export: Export) -> str:
+    """Give back what :func:`_publish` took."""
+    return f'''
+/* niess.chopcalc: release the published chopper train */
+if ({export.choppers} != NULL) {{
+  for (int chopcalc_i = 0; chopcalc_i < {export.count}; ++chopcalc_i) {{
+    if ({export.choppers}[chopcalc_i].windows != NULL) {{
+      free({export.choppers}[chopcalc_i].windows);
+    }}
+  }}
+  free({export.choppers});
+  {export.choppers} = NULL;
+  {export.count} = 0;
+}}
+'''
 
 
 def already_emitted(instrument) -> bool:
