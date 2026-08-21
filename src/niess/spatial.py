@@ -220,31 +220,32 @@ def mccode_ordered_angles(orientation: Variable):
     """
     if not __is_quaternion__(orientation):
         raise ValueError(f"{orientation=} expected to be a scipp quaternion")
-    from math import asin, atan2, pi
+    import warnings
+    from scipy.spatial.transform import Rotation
 
-    # Follow the suggestions at Wikipedia.com, and the gimbal-lock avoidance
-    # from EuclideanSpace.com
-    # https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
-    # http://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToEuler/
-
-    x, y, z, w = orientation.value
-    lock = x * y + z * w
-    if lock > 0.4999:
-        # gimbal lock with straight-up orientation
-        pitch = pi / 2
-        roll  = 2 * atan2(x, w)
-        yaw = 0
-    elif lock < -0.4999:
-        # gimbal lock with straight-down orientation (pitch = -90)
-        pitch = -pi / 2
-        roll = -2 * atan2(x, w)
-        yaw = 0
-    else:
-        roll = atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
-        pitch = asin(2 * (w * y - x * z))
-        yaw = atan2(2 * (w * z + x * y), 1 - 2 * (y *y + z * z))
-
-    return 180 / pi * roll, 180 / pi * pitch, 180 / pi * yaw
+    # R_z(z) R_y(y) R_x(x) applied on the left is x, then y, then z about *fixed* axes,
+    # which is what scipy calls the extrinsic 'xyz' sequence -- in that order, so the
+    # triple comes back already in McCode's order.
+    #
+    # This used to extract the angles by hand. Two things were wrong with that, and both
+    # returned a different rotation rather than failing: the gimbal-lock guard tested
+    # `x*y + z*w`, which belongs to a different Euler convention (YZX) than the ZYX
+    # formulas it guarded, so it fired away from the singularity and not at it; and no
+    # branch handled the real one, at y = +-90, where roll and yaw stop being separable.
+    # scipy resolves that degeneracy by convention -- picking one of the pair that
+    # represents the rotation -- which is all a caller can ask for.
+    #
+    # scipp stores a quaternion as (x, y, z, w), which is what from_quat expects.
+    #
+    # scipy warns at the singularity that it cannot determine all three angles uniquely.
+    # That is a property of the three-angle format rather than of this rotation -- every
+    # member of the family it picks from rebuilds the same rotation, which is all a
+    # `ROTATED` line needs -- so there is nothing for a caller to do about it, and an
+    # ordinary ROTATED (0, 90, 0) should not raise an alarm from inside scipy.
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', 'Gimbal lock detected', UserWarning)
+        angles = Rotation.from_quat(orientation.value).as_euler('xyz', degrees=True)
+    return float(angles[0]), float(angles[1]), float(angles[2])
 
 
 def mccode_quaternion(x, y, z):
