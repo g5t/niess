@@ -9,7 +9,8 @@ CHOPPER_LIB_REGISTRY = 'mcdotstar/mcstas-chopper-lib@v3.0.0'
 CHOPPER_LIB_MINIMUM_VERSION = 30000
 INCLUDE_MARKER = '%include "chopper-lib"'
 ARRAY_MARKER = 'chopcalc_choppers'
-WINDOWS_MARKER = 'chopcalc_windows'
+INDEX_MARKER = 'chopcalc_i'
+OUT_OF_MEMORY = 'niess.chopcalc: out of memory building the chopper train'
 
 DECLARE_TEXT = f'''
 /* niess.chopcalc: chopper-lib, for narrowing the source wavelength band */
@@ -40,8 +41,8 @@ def export_declare_text(export: Export) -> str:
     """
     return f"""
 /* niess.chopcalc: the chopper train, for components that take it as a parameter.
- * Filled in INITIALIZE and released in FINALLY, so it is valid for the whole run --
- * which the narrowing's own array is not, being scoped to its block. Pass
+ * INITIALIZE hands over the train it built and FINALLY releases it, so it is valid for
+ * the whole run -- which it is not otherwise, being freed as INITIALIZE leaves. Pass
  * (double *) {export.choppers} to a component whose parameter is declared that way.
  */
 multi_chopper_parameters * {export.choppers} = NULL;
@@ -52,29 +53,48 @@ int {export.count} = 0;
 def initialize_text(train: ChopperTrain) -> str:
     """The whole calculation, as one braced compound statement.
 
-    Braced so the array is scoped and ``chopcalc_*`` cannot collide with anything else in
-    INITIALIZE. The array is a local with run-time initialisers -- legal for automatic
-    storage, and what lets a row name an instrument parameter.
+    Braced so ``chopcalc_*`` cannot collide with anything else in INITIALIZE. The rows are
+    filled at run time rather than statically initialised, which is what lets one name an
+    instrument parameter.
+
+    The train is built on the heap whether or not anything else will read it. That costs
+    one allocation per disc and buys a single construction path: handing the train to a
+    component is then a pointer assignment rather than a copy, and the release is the same
+    few lines either way -- emitted at the end of this block when nobody else wants it, and
+    in FINALLY when somebody does.
     """
     source = train.source
+    count = len(train.choppers)
 
-    # One window array per disc, named for its row. They have to be separate objects:
-    # a multi_chopper_parameters row holds a pointer, not a copy, so every row needs an
-    # array that outlives the call -- these are automatic in the same block, which does.
-    window_arrays = '\n'.join(
-        f'  chopper_window {WINDOWS_MARKER}_{i}[] = {{'
-        + ', '.join(f'{{{lo}, {hi}}}' for lo, hi in c.windows)
-        + f'}}; /* {c.name} */'
-        for i, c in enumerate(train.choppers)
-    )
-    rows = ',\n'.join(
-        f'    {{{c.speed}, {c.delay}, {len(c.windows)}, {WINDOWS_MARKER}_{i}, {c.path}}}'
+    # A row carries a pointer to its openings, so each gets an array of its own, allocated
+    # where the row is written. Checking them all at once afterwards keeps the table above
+    # readable and the boilerplate the same size however many discs there are.
+    rows = '\n'.join(
+        f'  {ARRAY_MARKER}[{i}] = (multi_chopper_parameters){{'
+        f'{c.speed}, {c.delay}, {len(c.windows)},\n'
+        f'    (chopper_window *) calloc({len(c.windows)}, sizeof(chopper_window)),'
+        f' {c.path}}};'
         f' /* {c.name}, {len(c.windows)} opening{"" if len(c.windows) == 1 else "s"}'
         f'{"" if c.note is None else " -- " + c.note} */'
         for i, c in enumerate(train.choppers)
     )
+    # written out index by index: the values differ per opening, so a loop would need a
+    # table to read from, and the table would be this
+    openings = '\n'.join(
+        f'  {ARRAY_MARKER}[{i}].windows[{w}] = (chopper_window){{{lo}, {hi}}};'
+        for i, c in enumerate(train.choppers)
+        for w, (lo, hi) in enumerate(c.windows)
+    )
 
-    published = '' if train.export is None else _publish(train.export)
+    if train.export is None:
+        handover = f'''
+  /* nothing else reads the train, so give it back before leaving */
+{_release(ARRAY_MARKER, str(count))}'''
+    else:
+        handover = f'''
+  /* hand the train over; FINALLY releases it */
+  {train.export.choppers} = {ARRAY_MARKER};
+  {train.export.count} = {count};'''
 
     notes = [
         f'{len(train.choppers)} chopper{"" if len(train.choppers) == 1 else "s"} '
@@ -96,15 +116,25 @@ def initialize_text(train: ChopperTrain) -> str:
 {indent(chr(10).join(" * " + n for n in notes), "")}
  */
 {{
-{window_arrays}
-  multi_chopper_parameters {ARRAY_MARKER}[] = {{
+  multi_chopper_parameters * {ARRAY_MARKER} = (multi_chopper_parameters *) calloc(
+    {count}, sizeof(multi_chopper_parameters));
+  if ({ARRAY_MARKER} == NULL) {{
+    printf("{OUT_OF_MEMORY}\\n");
+    exit(-1);
+  }}
 {rows}
-  }};
+  for (int {INDEX_MARKER} = 0; {INDEX_MARKER} < {count}; ++{INDEX_MARKER}) {{
+    if ({ARRAY_MARKER}[{INDEX_MARKER}].windows == NULL) {{
+      printf("{OUT_OF_MEMORY}\\n");
+      exit(-1);
+    }}
+  }}
+{openings}
   double chopcalc_latest = {source.latest_emission}; /* {source.latest_emission_note}, s */
   double chopcalc_min = {source.lambda_min}, chopcalc_max = {source.lambda_max};
   unsigned chopcalc_bands = multi_chopper_wavelength_limits(
     &{source.lambda_min}, &{source.lambda_max},
-    sizeof({ARRAY_MARKER}) / sizeof(multi_chopper_parameters), {ARRAY_MARKER},
+    {count}, {ARRAY_MARKER},
     chopcalc_min, chopcalc_max, chopcalc_latest);
   if (chopcalc_bands == 0 || !({source.lambda_max} > {source.lambda_min})
       || {source.lambda_min} <= 0) {{
@@ -129,56 +159,31 @@ def initialize_text(train: ChopperTrain) -> str:
     MPI_MASTER(printf("niess.chopcalc: sampling %g to %g AA instead of %g to %g AA.\\n",
       {source.lambda_min}, {source.lambda_max}, chopcalc_min, chopcalc_max););
   }}
-{published}}}
+{handover}
+}}
 '''
     return body
 
 
-def _publish(export: Export) -> str:
-    """Copy the train to storage that outlives the block it was built in.
+def _release(name: str, count: str) -> str:
+    """Give back a train built by :func:`initialize_text`.
 
-    A deep copy, because a row points at its window array rather than carrying it, and
-    both are automatic here. Copying the rows alone would leave every ``windows`` pointing
-    into a dead frame -- which reads back plausibly for a while, and is the sort of thing
-    that shows up as a wrong band on someone else's machine.
+    Each row owns its openings, so those go first: freeing the row array alone loses every
+    window array with it. Emitted at the end of INITIALIZE when nothing else reads the
+    train, and in FINALLY when something does -- the same lines, in one place or the other.
     """
-    return f'''
-  /* publish the train, for a component that takes it as a parameter */
-  {export.count} = (int)(sizeof({ARRAY_MARKER}) / sizeof(multi_chopper_parameters));
-  {export.choppers} = (multi_chopper_parameters *) calloc(
-    (size_t) {export.count}, sizeof(multi_chopper_parameters));
-  if ({export.choppers} == NULL) {{
-    printf("niess.chopcalc: out of memory publishing {export.choppers}\\n");
-    exit(-1);
+    return f'''  for (int {INDEX_MARKER} = 0; {INDEX_MARKER} < {count}; ++{INDEX_MARKER}) {{
+    if ({name}[{INDEX_MARKER}].windows != NULL) free({name}[{INDEX_MARKER}].windows);
   }}
-  for (int chopcalc_i = 0; chopcalc_i < {export.count}; ++chopcalc_i) {{
-    {export.choppers}[chopcalc_i] = {ARRAY_MARKER}[chopcalc_i];
-    {export.choppers}[chopcalc_i].windows = (chopper_window *) calloc(
-      (size_t) {ARRAY_MARKER}[chopcalc_i].window_count, sizeof(chopper_window));
-    if ({export.choppers}[chopcalc_i].windows == NULL) {{
-      printf("niess.chopcalc: out of memory publishing {export.choppers}\\n");
-      exit(-1);
-    }}
-    for (unsigned chopcalc_w = 0;
-         chopcalc_w < {ARRAY_MARKER}[chopcalc_i].window_count; ++chopcalc_w) {{
-      {export.choppers}[chopcalc_i].windows[chopcalc_w] =
-        {ARRAY_MARKER}[chopcalc_i].windows[chopcalc_w];
-    }}
-  }}
-'''
+  free({name});'''
 
 
 def finalize_text(export: Export) -> str:
-    """Give back what :func:`_publish` took."""
+    """Release a train INITIALIZE handed over."""
     return f'''
 /* niess.chopcalc: release the published chopper train */
 if ({export.choppers} != NULL) {{
-  for (int chopcalc_i = 0; chopcalc_i < {export.count}; ++chopcalc_i) {{
-    if ({export.choppers}[chopcalc_i].windows != NULL) {{
-      free({export.choppers}[chopcalc_i].windows);
-    }}
-  }}
-  free({export.choppers});
+{_release(export.choppers, export.count)}
   {export.choppers} = NULL;
   {export.count} = 0;
 }}

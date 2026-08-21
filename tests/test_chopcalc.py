@@ -95,7 +95,8 @@ def test_the_band_is_narrowed_through_the_sources_own_parameters(teaching):
 def test_a_chopper_is_named_not_valued(teaching):
     """The row references run-time parameters, so the band recomputes without a rebuild."""
     narrow_source_wavelengths(teaching)
-    assert '{chopperspeed, chopperdelay, 1, chopcalc_windows_' in str(teaching.instrument)
+    assert 'chopcalc_choppers[0] = (multi_chopper_parameters){chopperspeed, ' \
+           'chopperdelay, 1,' in str(teaching.instrument)
 
 
 def test_a_single_opening_disc_is_one_window_either_side_of_zero(teaching):
@@ -108,7 +109,8 @@ def test_a_single_opening_disc_is_one_window_either_side_of_zero(teaching):
     train = narrow_source_wavelengths(teaching)
     chopper = next(c for c in train.choppers if c.name == 'chopper')
     assert chopper.windows == (('-85.0', '85.0'),)   # theta_0 = 170 degrees
-    assert 'chopper_window chopcalc_windows_' in str(teaching.instrument)
+    assert 'chopcalc_choppers[0].windows[0] = (chopper_window){-85.0, 85.0};' \
+           in str(teaching.instrument)
 
 
 def test_every_chopper_is_found_however_deeply_it_is_nested(bifrost):
@@ -189,7 +191,8 @@ def test_calling_it_twice_does_not_narrow_twice(teaching, caplog):
     with caplog.at_level(logging.WARNING):
         assert narrow_source_wavelengths(teaching) is None
     assert 'already been narrowed' in caplog.text
-    assert str(teaching.instrument).count('chopcalc_choppers[]') == 1
+    assert str(teaching.instrument).count(
+        'multi_chopper_parameters * chopcalc_choppers') == 1
 
 
 # -- publishing the train for a component to read -----------------------------
@@ -209,26 +212,42 @@ def test_the_train_can_be_published_for_a_component_to_read(teaching):
     text = str(teaching.instrument)
     assert 'multi_chopper_parameters * train = NULL;' in text
     assert 'int train_count = 0;' in text
-    assert 'train = (multi_chopper_parameters *) calloc(' in text
+    # the train is built on the heap either way, so handing it over is an assignment
+    assert 'train = chopcalc_choppers;' in text
+    assert 'train_count = 1;' in text
     assert 'free(train);' in text
     assert 'train = NULL;' in text
 
 
-def test_the_published_copy_is_a_deep_one(teaching):
-    """A row points at its window array rather than carrying it.
+def test_publishing_moves_the_release_rather_than_copying_the_train(teaching):
+    """The train is on the heap whether or not anything else reads it.
 
-    Both are automatic in the block that builds them, so copying the rows alone would
-    leave every ``windows`` pointing into a dead frame -- which reads back plausibly for a
-    while and shows up as a wrong band somewhere else entirely.
+    That is the point of building it there: publishing is then a pointer assignment, and
+    the release is the same few lines wherever it ends up. Without an export they run at
+    the end of INITIALIZE; with one they run in FINALLY, and nowhere else.
     """
-    narrow_source_wavelengths(teaching, export_choppers='train', strict=True)
-    text = str(teaching.instrument)
-    # each row gets its own windows...
-    assert 'train[chopcalc_i].windows = (chopper_window *) calloc(' in text
-    # ...copied element by element...
-    assert 'train[chopcalc_i].windows[chopcalc_w] =' in text
-    # ...and freed one row at a time, or the window arrays would leak
-    assert 'free(train[chopcalc_i].windows);' in text
+    plain = narrow_source_wavelengths(teaching)
+    kept = str(teaching.instrument)
+
+    from mccode_antlr import Flavor
+    from mccode_antlr.assembler import Assembler
+    from niess.teaching import Primary
+    other = Assembler('teaching', flavor=Flavor.MCSTAS)
+    Primary.from_calibration().to_mccode(other)
+    narrow_source_wavelengths(other, export_choppers='train', strict=True)
+    published = str(other.instrument)
+
+    assert plain.export is None
+    # the same release, once each, on whichever name owns the train
+    release = 'free(chopcalc_choppers);'
+    assert kept.count(release) == 1
+    assert published.count(release) == 0
+    assert published.count('free(train);') == 1
+    # each row's openings go back before the row array, or they would leak with it
+    assert 'free(chopcalc_choppers[chopcalc_i].windows);' in kept
+    assert 'free(train[chopcalc_i].windows);' in published
+    # and nothing is copied to get there
+    assert 'windows[chopcalc_w]' not in published
 
 
 def test_the_count_can_be_named(teaching):
@@ -243,7 +262,9 @@ def test_nothing_is_published_unless_it_is_asked_for(teaching):
     train = narrow_source_wavelengths(teaching)
     assert train.export is None
     text = str(teaching.instrument)
-    assert 'multi_chopper_parameters *' not in text
+    # the train itself is still a heap local; what is absent is file-scope storage for it
+    assert 'multi_chopper_parameters * chopcalc_choppers' in text
+    assert '= NULL;\nint ' not in text
     assert 'FINALLY' not in text
 
 

@@ -91,14 +91,16 @@ multi_chopper_parameters * bifrost_choppers = NULL;
 int bifrost_choppers_count = 0;
 ```
 
-fills them from a deep copy at the end of the narrowing, and frees them in FINALLY. The
-count name defaults to `f'{export_choppers}_count'`; pass `export_chopper_count=` to
-choose it. Both are reported back on `train.export`.
+hands the train over at the end of the narrowing, and frees it in FINALLY. The count name
+defaults to `f'{export_choppers}_count'`; pass `export_chopper_count=` to choose it. Both
+are reported back on `train.export`.
 
-The copy is deep because a row *points at* its window array rather than carrying it, and
-both are automatic in the block that built them — copying the rows alone would leave every
-`windows` pointing into a dead frame. FINALLY frees each row's windows before the row
-array, or those would leak.
+The train is built on the heap whether or not anything else will read it, which is what
+makes the handover a pointer assignment rather than a copy. It costs one allocation per
+disc, and it means there is one construction path and one release — the same few lines,
+emitted at the end of INITIALIZE when nobody else wants the train, and in FINALLY when
+somebody does. Each row's openings go back before the row array either way, since freeing
+the array alone would lose every window array with it.
 
 Pass `(double *) bifrost_choppers` to a component whose own parameter is declared that
 way, which is the usual shape for handing a struct array through McStas.
