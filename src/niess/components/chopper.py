@@ -49,11 +49,38 @@ class Chopper(Component):
 
 
 class DiscChopper(Chopper):
-    """Ideally infinitely thin material with rotation vector parallel to the path"""
+    """Ideally infinitely thin material with rotation vector parallel to the path.
+
+    One disc, however many openings it has. McStas' ``DiskChopper`` describes ``nslit``
+    *identical, evenly spaced* openings and nothing else, so a disc whose openings are
+    neither is emitted as a ``GROUP`` of ``DiskChopper`` instances at the same place, one
+    per opening -- the alternative that component's own documentation points at. A disc
+    with a single opening is emitted as a single component, exactly as before.
+
+    Geometry follows ``NXdisk_chopper``, so the calibration is the same description a
+    NeXus file will carry:
+
+    ``zero_angle``
+        Where the disc's reference mark sits, as an angle from the local **+y** axis.
+        (``top_dead_center`` in ``NXdisk_chopper``, and accepted under that name too.)
+    ``beam_angle``
+        Where the beam crosses the disc, as an angle from the reference mark. 180 for a
+        disc that hangs above the beam. (``beam_position`` in ``NXdisk_chopper``.)
+    ``windows`` (``slit_edges``)
+        The angular edges of the openings, **measured from the reference mark**: an even
+        number of increasing values, two per opening. Giving ``angle`` instead is
+        shorthand for one opening centred on the beam, ``beam_angle`` +- ``angle``/2.
+
+    Every angle is positive counter-clockwise viewed facing **+z**, i.e. looking
+    downstream. An opening that straddles the reference mark at zero delay is written
+    as a final edge beyond 360 degrees -- ``[350, 370]`` rather than ``[350, 10]`` --
+    so the pairs stay ordered and each width is simply the difference.
+
+    ``delay`` is when the *disc's* zero-angle point is on the beam. Each opening is
+    reached a fixed angle later, which becomes a fixed time only once the speed is known,
+    so that part is left to the generated C.
+    """
     # `radius` is the outer dimension of the disc.
-    # `windows` are ordered angular edges of the openings in the disc
-    # `delay` is when an opening's centre is on the path -- McStas' DiskChopper acts on
-    #     this and only derives `phase` from it, so it is what gets emitted.
     # Where the beam crosses the disc, as two angles about +z, positive counter-clockwise
     # viewed facing +z (looking downstream), measured from the local +y axis. Zero for
     # both means the beam crosses at the top of the disc, which is the arrangement McStas'
@@ -116,12 +143,22 @@ class DiscChopper(Chopper):
             raise ValueError('velocity (or frequency) cannot be None')
         delay = cal.get('delay', scalar(0.0, unit='s'))
         radius = cal['radius']
-        # A single `angle` is the two edges of one opening, centred on zero. Derived
-        # rather than written back: calibrations are reused across builds, and a build
-        # that edits the dictionary it was handed changes what the next one reads.
+        # `top_dead_center` and `beam_position` are the NXdisk_chopper field names, which
+        # these started out carrying; accept them without writing back to the caller's
+        # dictionary, which calibrations reuse across builds.
+        zero_angle = cal.get('zero_angle', cal.get('top_dead_center', _zero_degrees()))
+        beam_angle = cal.get('beam_angle', cal.get('beam_position', _zero_degrees()))
+        # A single `angle` is one opening centred on the beam. Its edges are still
+        # measured from the zero mark, like every other window, so the beam angle is
+        # where they are centred -- which is what makes a one-opening disc and a
+        # many-opening one the same description.
+        #
+        # Derived rather than written back: calibrations are reused across builds, and a
+        # build that edits the dictionary it was handed changes what the next one reads.
         windows = cal.get('windows')
         if windows is None:
-            windows = cal['angle'].to(unit='deg') / 2 * array(values=[-1, 1], dims=['edges'])
+            half = cal['angle'].to(unit='deg') / 2 * array(values=[-1, 1], dims=['edges'])
+            windows = beam_angle.to(unit='deg') + half
         width = cal.get('width') # None is actually acceptable
         height = cal.get('height')  # None is acceptable, then slit extends to center
         if 'offset' in cal:
@@ -133,11 +170,6 @@ class DiscChopper(Chopper):
                 f"that was meant to be used would move the disc off the beam, where it "
                 f"absorbs every neutron without saying so."
             )
-        # `top_dead_center` and `beam_position` are the NXdisk_chopper field names, which
-        # these started out carrying; accept them without writing back to the caller's
-        # dictionary, which calibrations reuse across builds.
-        zero_angle = cal.get('zero_angle', cal.get('top_dead_center', _zero_degrees()))
-        beam_angle = cal.get('beam_angle', cal.get('beam_position', _zero_degrees()))
         return cls(
             name=name,
             position=position,
@@ -152,72 +184,15 @@ class DiscChopper(Chopper):
             beam_angle=beam_angle,
         )
 
-    def __mccode__(self) -> tuple[str, dict]:
-        from scipp import max, min
-        if self.windows.size != 2:
-            # The McStas way of handling multiple windows is one of two options:
-            #   1. if they are equally spaced and all the same size, use 'nslit'
-            #   2. otherwise use a group of choppers all at the same position but
-            #      rotated relative to one another by their slit difference. One per.
-            raise ValueError("Currently only one window supported. Investigate using a group here")
-        params = {
-            'theta_0': (max(self.windows) - min(self.windows)).to(unit='deg').value,
-            'nslit': 1,
-            'radius': self.radius.to(unit='m').value,
-            'nu': f'{self.name}speed',
-            # Not `phase`: a non-zero one makes DiskChopper ignore `delay` and warn.
-            'delay': f'{self.name}delay',
-        }
-        # Only add width of height if provided:
-        if self.width is not None:
-            params['xwidth'] = self.width.to(unit='m').value
-        if self.height is not None:
-            params['yheight'] = self.height.to(unit='m').value
-        return 'DiskChopper', params
-
-    def to_mccode(
-            self, assembler: Assembler,
-            at: Instance | str | None = None, rotate: Instance | str | None = None,
-            insert_provenance_metadata: bool = True,
-    ):
-        from ..mccode import ensure_runtime_line as ensure
-        ensure(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
-        ensure(assembler, f'{self.name}delay/"s" = {self.delay.to(unit="s").value}')
-        # where the beam crosses the disc is handled by super's to_mccode, through
-        # the __mccode_offset__ and __mccode_orientation__ hooks below
-        return super().to_mccode(assembler, at, rotate, insert_provenance_metadata=insert_provenance_metadata)
-
-
-class MultiSlitChopper(DiscChopper):
-    """A disc whose openings are neither identical nor evenly spaced.
-
-    McStas' ``DiskChopper`` describes ``nslit`` identical, evenly spaced openings, so a
-    disc that has neither cannot be one of them. This is the alternative its docstring
-    points at: a group of ``DiskChopper`` instances at the same place, one per opening.
-
-    Geometry follows ``NXdisk_chopper`` so the calibration is the same description a
-    NeXus file will carry:
-
-    ``zero_angle``
-        Where the disc's reference mark sits, as an angle from the local **+y** axis.
-        (``top_dead_center`` in ``NXdisk_chopper``, and accepted under that name too.)
-    ``beam_angle``
-        Where the beam crosses the disc, as an angle from the reference mark. 180 for a
-        disc that hangs above the beam. (``beam_position`` in ``NXdisk_chopper``.)
-    ``windows`` (``slit_edges``)
-        The angular edges of the openings, measured from the reference mark: an even
-        number of **positive**, increasing values, two per opening.
-
-    Every angle is positive counter-clockwise viewed facing **+z**, i.e. looking
-    downstream. An opening that straddles the reference mark at zero delay is written
-    as a final edge beyond 360 degrees -- ``[350, 370]`` rather than ``[350, 10]`` --
-    so the pairs stay ordered and each width is simply the difference.
-    """
     def slits(self) -> list[tuple[float, float]]:
-        """The ``(opening, closing)`` edge pair of each slit, in degrees from the mark.
+        """The ``(opening, closing)`` edge pair of each opening, in degrees from the mark.
 
-        Validates the ``NXdisk_chopper`` conventions: an even number of positive,
-        increasing edges, with only the final one permitted to reach beyond 360.
+        Validates what the pairs have to satisfy to be openings of one disc: an even
+        number of strictly increasing edges spanning no more than a revolution. They are
+        not required to be positive -- an opening centred on a beam at ``beam_angle = 0``
+        straddles the mark, and writing it as ``[-85, 85]`` says so more plainly than
+        ``[275, 445]``. The NeXus writer normalises into ``[0, 360)``, where the
+        ``NXdisk_chopper`` convention actually applies.
         """
         edges = [float(v) for v in self.windows.to(unit='deg').values]
         if len(edges) < 2 or len(edges) % 2:
@@ -225,18 +200,8 @@ class MultiSlitChopper(DiscChopper):
                 f'{self.name} has {len(edges)} slit edges; an even number of at least '
                 'two is required, two per opening'
             )
-        if any(edge < 0 for edge in edges):
-            raise ValueError(
-                f'{self.name} has a negative slit edge; edges are measured from the '
-                'top-dead-centre mark and increase counter-clockwise facing +z'
-            )
         if any(b <= a for a, b in zip(edges, edges[1:])):
             raise ValueError(f'{self.name} slit edges must strictly increase: {edges}')
-        if edges[0] >= 360.0:
-            raise ValueError(
-                f'{self.name} opens first at {edges[0]} degrees; the first edge must '
-                'lie within one revolution of the mark'
-            )
         if edges[-1] - edges[0] > 360.0:
             # Exactly 360 is the limiting case: the last opening closes precisely where
             # the first one opens. Beyond that they would overlap themselves.
@@ -247,12 +212,23 @@ class MultiSlitChopper(DiscChopper):
         return [(edges[i], edges[i + 1]) for i in range(0, len(edges), 2)]
 
     def __mccode__(self) -> tuple[str, dict]:
-        """The disc-level parameters, shared by every opening it emits."""
+        """The disc's parameters, taking its first opening.
+
+        ``theta_0`` and ``delay`` belong to an opening rather than to the disc, so
+        :meth:`to_mccode` overwrites them for each one it emits -- in place, which is why
+        they are here rather than appended there: a dict keeps the position of a key it
+        already has, and the emitted parameter order is worth keeping stable.
+        """
+        opening, closing = self.slits()[0]
         params = {
+            'theta_0': closing - opening,
             'nslit': 1,
             'radius': self.radius.to(unit='m').value,
             'nu': f'{self.name}speed',
+            # Not `phase`: a non-zero one makes DiskChopper ignore `delay` and warn.
+            'delay': f'{self.name}delay',
         }
+        # Only add width or height if provided:
         if self.width is not None:
             params['xwidth'] = self.width.to(unit='m').value
         if self.height is not None:
@@ -260,7 +236,7 @@ class MultiSlitChopper(DiscChopper):
         return 'DiskChopper', params
 
     def group_name(self) -> str:
-        """The McStas GROUP the emitted openings share.
+        """The McStas GROUP the emitted openings share, when there is more than one.
 
         Instance names are unique within an instrument, so deriving the group from this
         disc's name makes it unique too.
@@ -299,7 +275,8 @@ class MultiSlitChopper(DiscChopper):
         So the angle is computed here and the rest is left to the generated C, where the
         speed is a real number rather than a name. An opening already at the beam is a
         special case worth taking: it is there at ``{name}delay`` whichever way the disc
-        spins, so it needs no variable at all.
+        spins, so it needs no variable at all -- which is every disc described by a plain
+        ``angle``, since that centres its one opening on the beam.
         """
         turn = self._counter_clockwise_turn(opening, closing)
         if turn == 0:
@@ -313,13 +290,45 @@ class MultiSlitChopper(DiscChopper):
         )
         return f'{name}_delay'
 
+    def _opening_extra(self, index: int, opening: float, closing: float,
+                       several: bool) -> dict:
+        """What the provenance records about one emitted opening.
+
+        Every disc carries its own geometry, so a NeXus translator can rebuild an
+        ``NXdisk_chopper`` from any of them. Only a disc split across several components
+        also carries the group tags that say which instances belong together.
+        """
+        extra = {
+            'slit_edges': [opening, closing],
+            # NXdisk_chopper's own names, which the NeXus translator writes
+            'top_dead_center': self.zero_angle.to(unit='deg').value,
+            'beam_position': self.beam_angle.to(unit='deg').value,
+            # The disc's own timing, so a translator rebuilding the disc can link it
+            # without re-deriving the parameter naming convention.
+            'delay_parameter': f'{self.name}delay',
+        }
+        if several:
+            extra['nexus_group_id'] = self.name
+            extra['nexus_group_index'] = index
+        return extra
+
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
             insert_provenance_metadata: bool = True,
-    ) -> list[Instance]:
-        """Emit one ``DiskChopper`` per opening, tagged as one disc."""
-        from ..mccode import add_niess_metadata, ensure_runtime_line
+    ) -> Instance | list[Instance]:
+        """Emit one ``DiskChopper`` per opening.
+
+        A single opening emits a single component under the disc's own name, which is
+        what a disc chopper has always been. Several emit a ``GROUP`` -- one disc, so a
+        neutron passes if it clears *any* opening, where ungrouped each instance would
+        absorb whatever missed its own slit and a neutron would have to be inside every
+        opening at once to survive.
+
+        Returns the instance, or the list of them, to match.
+        """
+        from mccode_antlr.common.parameters import InstrumentParameter as InstPar
+        from ..mccode import add_niess_metadata, ensure_runtime_line, ensure_runtime_parameter
         from ..spatial import mccode_ordered_angles
 
         ensure_runtime_line(assembler, f'{self.name}speed/"Hz" = {self.speed.value}')
@@ -334,41 +343,38 @@ class MultiSlitChopper(DiscChopper):
 
         component, shared = self.__mccode__()
         slits = self.slits()
+        several = len(slits) > 1
 
         instances = []
         for index, (opening, closing) in enumerate(slits):
-            name = f'{self.name}_slit_{index}'
+            name = f'{self.name}_slit_{index}' if several else self.name
             parameters = dict(shared)
+            # overwritten, not added: see __mccode__ on why the order matters
             parameters['theta_0'] = closing - opening
             parameters['delay'] = self._slit_delay(assembler, name, opening, closing)
+            # as Component.to_mccode does: a parameter given as an instrument parameter
+            # has to be declared before it can be named
+            for key, value in [(k, v) for k, v in parameters.items()
+                               if isinstance(v, InstPar)]:
+                ensure_runtime_parameter(assembler, value)
+                parameters[key] = str(value)
 
             instance = assembler.component(
                 name, component,
                 at=placement, rotate=rotation, parameters=parameters,
             )
-            # One disc, so a neutron passes if it clears *any* opening. Ungrouped,
-            # each DiskChopper absorbs whatever misses its own slit, and a neutron
-            # would have to be inside every opening at once to survive.
-            instance.GROUP(self.group_name())
+            if several:
+                instance.GROUP(self.group_name())
             if insert_provenance_metadata:
                 add_niess_metadata(
                     instance, self,
-                    source_name=f'{self.name}_slit_{index}',
-                    role='nexus-group-primary' if index == 0 else 'nexus-group-member',
-                    extra={
-                        'nexus_group_id': self.name,
-                        'nexus_group_index': index,
-                        # The disc's own timing, so a translator rebuilding the disc can
-                        # link it without re-deriving the parameter naming convention.
-                        'delay_parameter': f'{self.name}delay',
-                        'slit_edges': [opening, closing],
-                        # NXdisk_chopper's own names, which the NeXus translator writes
-                        'top_dead_center': self.zero_angle.to(unit='deg').value,
-                        'beam_position': self.beam_angle.to(unit='deg').value,
-                    },
+                    source_name=name,
+                    role=('nexus-group-primary' if index == 0 else 'nexus-group-member')
+                    if several else self.__mccode_role__(),
+                    extra=self._opening_extra(index, opening, closing, several),
                 )
             instances.append(instance)
-        return instances
+        return instances if several else instances[0]
 
 
 class FermiChopper(Chopper):

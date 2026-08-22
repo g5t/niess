@@ -214,36 +214,60 @@ def monitor_translator(t, default_stream: dict | None = None):
     return component_body('NXmonitor', children)
 
 
-# Registered by niess source type rather than by McStas component type: every instance
-# a MultiSlitChopper emits is a plain DiskChopper, and only the provenance says they
+# Registered by niess source type rather than by McStas component type: a disc with
+# several openings emits several plain DiskChoppers, and only the provenance says they
 # are one disc. Naming the source type as a string keeps niess.components out of this
 # module's imports.
-@DEFAULT_NEXUS_REGISTRY.register('niess.components.chopper.MultiSlitChopper')
-def multi_slit_chopper_translator(t):
-    """Rebuild a multi-slit disc from the components it was split across.
+#
+# The bare-DiskChopper translator above still serves instruments niess did not build,
+# where `theta_0` is all there is to go on.
+@DEFAULT_NEXUS_REGISTRY.register('niess.components.chopper.DiscChopper')
+def disc_chopper_translator(t):
+    """Write a disc chopper, rebuilding one that was split across several components.
 
-    One instance carries the whole disc; the rest emit nothing. Which is which comes
-    from the provenance role, so it does not depend on the order the instances appear
-    in the instrument.
+    A disc with several openings emits one DiskChopper apiece; one of them carries the
+    whole disc here and the rest emit nothing. Which is which comes from the provenance
+    role, so it does not depend on the order the instances appear in the instrument. A
+    disc with a single opening is one component and is simply itself.
     """
     from . import expression
     from ..provenance import NiessProvenance
 
-    if t.provenance is None or t.provenance.role != 'nexus-group-primary':
-        # A slit folded into the primary instance above -- emit nothing at all
+    if t.provenance is None:
+        return None
+    if t.provenance.role == 'nexus-group-member':
+        # An opening folded into the primary instance above -- emit nothing at all
         return None
 
-    edges = []
-    for sibling in t.siblings_in_group():
-        extra = NiessProvenance.from_instance(sibling).extra
-        edges.extend(extra['slit_edges'])
+    siblings = t.siblings_in_group()
+    if siblings:
+        edges = []
+        for sibling in siblings:
+            extra = NiessProvenance.from_instance(sibling).extra
+            edges.extend(extra['slit_edges'])
+    else:
+        # a single-opening disc: its own provenance is the whole story
+        edges = list(t.provenance.extra['slit_edges'])
 
-    # NXdisk_chopper geometry, exactly as the component recorded it: angles measured
-    # from the top-dead-centre mark, positive counter-clockwise facing +z, with a final
-    # edge beyond 360 where the last opening straddles the mark.
+    # NXdisk_chopper geometry: angles measured from the top-dead-centre mark, positive
+    # counter-clockwise facing +z, with a final edge beyond 360 where the last opening
+    # straddles the mark. The component allows an opening written across the mark as a
+    # negative first edge, which is clearer to read; the standard wants them positive,
+    # so shift the pairs into [0, 360) here, where the standard is what applies.
+    if edges and edges[0] < 0.0:
+        edges = [edge + 360.0 for edge in edges]
+
     children = [
         dataset('slits', len(edges) // 2),
         dataset('slit_edges', edges, dtype='double', attrs={'units': 'degrees'}),
+    ]
+    # `slit_angle` is one angular opening, so it only means something when the openings
+    # are all the same size -- which every single-opening disc trivially is, and which is
+    # what the bare-DiskChopper translator assumes for all of them.
+    widths = {round(b - a, 12) for a, b in zip(edges[::2], edges[1::2])}
+    if len(widths) == 1:
+        children.append(dataset('slit_angle', widths.pop(), attrs={'units': 'degrees'}))
+    children += [
         t.parameter_node('rotation_speed', source='nu', dtype=float,
                          attrs={'units': 'Hz'}),
         dataset('radius', t.parameter('radius', dtype=float, default=0.0),

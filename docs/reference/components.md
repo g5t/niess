@@ -45,8 +45,7 @@ fixed numbers.
 
 | niess class | emits | calibration keys |
 | --- | --- | --- |
-| `DiscChopper` | `DiskChopper` | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `zero_angle`, `beam_angle` |
-| `MultiSlitChopper` | one `DiskChopper` **per opening** | as `DiscChopper`, with `windows` holding two edges per opening |
+| `DiscChopper` | one `DiskChopper` **per opening** | `radius`, `angle` or `windows`, `frequency` or `velocity`, `delay`, `width`, `height`, `zero_angle`, `beam_angle` |
 
 A disc chopper's `position` is its **spindle**; the emitted `AT` is the point the beam
 crosses the disc. `zero_angle` and `beam_angle` say where that point is — measured
@@ -63,17 +62,27 @@ every neutron without saying so. `disc_beam_offset` is the one formula, and cali
 code that knows where the beam runs and needs the spindle negates what the chopper
 derives going the other way.
 
-`DiscChopper` declares `{name}speed` and `{name}delay` as instrument parameters, and
-accepts a single opening only. A disc whose openings are neither identical nor evenly
-spaced is a `MultiSlitChopper`: it emits one `DiskChopper` per opening, sharing one
-speed and delay, places them in one McStas `GROUP` so a neutron passes if it clears any
-opening, and tags them so `niess.nexus` rebuilds them as a single `NXdisk_chopper`. Its geometry follows that NeXus class: angles positive
-counter-clockwise facing +z, slit edges positive and increasing from the disc's
-top-dead-centre mark, and a final edge beyond 360 where the last opening straddles the
-mark. See
+`DiscChopper` declares `{name}speed` and `{name}delay` as instrument parameters.
+
+McStas' `DiskChopper` describes `nslit` **identical, evenly spaced** openings and nothing
+else, so a disc whose openings are neither is emitted as one `DiskChopper` per opening —
+sharing one speed and delay, placed in a McStas `GROUP` so a neutron passes if it clears
+*any* opening, and tagged so `niess.nexus` rebuilds them as a single `NXdisk_chopper`. A
+disc with one opening is one component under its own name, which is what a disc chopper
+has always been. See
 [composites](../how-to/new-instrument-submodule.md#composites-when-one-object-is-several-components).
-Only a single window is supported per emitted `DiskChopper`, which is why a disc with
-several openings emits one apiece.
+
+`windows` (`slit_edges`) are measured **from the zero mark**: an even number of increasing
+values, two per opening, positive counter-clockwise facing +z, with a final edge beyond
+360 where the last opening straddles the mark. Giving `angle` instead is shorthand for one
+opening centred on the beam, `beam_angle ± angle/2` — so `angle = 170` on a disc hanging
+above the beam is `[95, 265]`, whose centre is the beam and whose emitted `delay` is
+therefore the disc's own.
+
+Edges are not required to be positive: an opening centred on a beam at `beam_angle = 0`
+straddles the mark, and `[-85, 85]` says so more plainly than `[275, 445]`. The NeXus
+writer shifts them into `[0, 360)`, where the `NXdisk_chopper` convention applies, and
+writes `top_dead_center` and `beam_position` alongside them so the frame is recorded.
 
 `delay` is a time, not an angle: it is when an opening's centre is at the beam, which is
 what McStas' `DiskChopper` acts on and what a real chopper is set with. The component

@@ -13,7 +13,7 @@ the disc radius, silently, so a chopper placed off the beam counts nothing at al
 import pytest
 from mccode_antlr import Flavor
 from mccode_antlr.assembler import Assembler
-from scipp import scalar, vector
+from scipp import array, scalar, vector
 from scipp.spatial import rotations_from_rotvecs
 
 from niess.components import DiscChopper
@@ -94,6 +94,79 @@ def test_a_disc_with_no_slit_height_is_centred_on_half_its_radius():
     cal.pop('height')
     disc = DiscChopper.from_calibration(cal)
     assert disc.beam_offset().to(unit='m').value == pytest.approx([0.0, RADIUS / 2, 0.0])
+
+
+# -- one disc, however many openings ------------------------------------------
+
+def test_a_single_opening_emits_one_component_under_the_discs_own_name():
+    """Which is what a disc chopper has always been, and has to stay.
+
+    The multi-opening machinery is now the only path, so it has to degenerate exactly:
+    one instance, its own name, no GROUP, and the ordinary role -- or every existing
+    instrument changes.
+    """
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    instance = disc.to_mccode(assembler)
+
+    assert not isinstance(instance, list)
+    assert [c.name for c in assembler.instrument.components] == ['chopper']
+    assert not instance.group
+    from niess.provenance import NiessProvenance
+    assert NiessProvenance.from_instance(instance).role == 'physical-component'
+
+
+def test_several_openings_emit_one_component_each_in_a_group():
+    disc = DiscChopper.from_calibration(calibration(
+        windows=array(values=[10.0, 30.0, 100.0, 140.0], dims=['edges'], unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    instances = disc.to_mccode(assembler)
+
+    assert [c.name for c in instances] == ['chopper_slit_0', 'chopper_slit_1']
+    assert all(c.group == 'chopper_group' for c in instances)
+    assert [c.get_parameter('theta_0').value for c in instances] == [20.0, 40.0]
+
+
+def test_the_angle_shorthand_centres_one_opening_on_the_beam():
+    """`angle` is shorthand, and the edges it produces are in the same frame as any other.
+
+    Measured from the mark, so an opening centred on a beam half a turn round is
+    `[95, 265]` rather than `[-85, 85]`. Its centre is the beam, which is what keeps the
+    emitted delay the disc's own -- the shorthand has always meant "centred on the beam",
+    and now it says so in the frame everything else uses.
+    """
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    assert disc.slits() == [(95.0, 265.0)]
+    assert disc._counter_clockwise_turn(95.0, 265.0) == 0.0
+
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    instance = disc.to_mccode(assembler)
+    assert str(instance.get_parameter('delay').value) == 'chopperdelay'
+    assert 'chopper_delay' not in str(assembler.instrument)
+
+
+def test_a_disc_writes_its_openings_to_nexus_in_the_mark_frame():
+    """With the frame alongside them, which is what NXdisk_chopper asks for.
+
+    A single-opening disc used to go through the bare-DiskChopper translator and write
+    beam-relative edges from `theta_0`, while a multi-opening one wrote mark-relative
+    ones. Both go through the same translator now.
+    """
+    from niess.nexus import to_nexus_structure
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    disc.to_mccode(assembler, at='origin', rotate='origin')
+
+    body = next(c for c in to_nexus_structure(assembler.instrument,
+                                              origin='origin')['children'][0]['children'][0]['children']
+                if c.get('name') == 'chopper')
+    found = {(ch.get('config') or {}).get('name'): (ch.get('config') or {}).get('values')
+             for ch in body['children']}
+    assert found['slit_edges'] == [95.0, 265.0]
+    assert found['top_dead_center'] == 0.0
+    assert found['beam_position'] == 180.0
+    assert found['slit_angle'] == 170.0
 
 
 # -- the angles are the only description --------------------------------------

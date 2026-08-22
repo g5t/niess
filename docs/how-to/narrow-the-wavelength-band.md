@@ -113,9 +113,8 @@ pointer and a count of zero, so you want the exception.
 ## Discs with several openings
 
 Every disc is described to chopper-lib by its **openings**, as a
-`multi_chopper_parameters` row pointing at an array of window angles. A plain
-`DiskChopper` has one window, symmetric about zero — the same thing its single opening
-always meant — and a `MultiSlitChopper` has one per slit.
+`multi_chopper_parameters` row pointing at an array of window angles: one window for a
+disc with a single opening, one per slit for a disc with several.
 
 The angles are measured from the point of the disc that its `delay` refers to, and
 chopper-lib puts an edge at angle `a` on the beam at `delay + a / (360 * speed)`. niess

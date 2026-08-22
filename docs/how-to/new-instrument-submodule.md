@@ -177,9 +177,10 @@ whose openings are unevenly spaced: McStas' `DiskChopper` describes `nslit` *ide
 evenly spaced* openings, so an irregular disc has to be emitted as one `DiskChopper`
 per opening.
 
-niess ships that case as `MultiSlitChopper`, and it is the shortest complete example of
-a composite. Its calibration is the `NXdisk_chopper` description, so the same numbers
-serve McStas and NeXus:
+niess ships that case as `DiscChopper` with several `windows`, and it is the shortest
+complete example of a composite -- a disc with one opening emits a single component, and
+the same class emits a group when it has more. Its calibration is the `NXdisk_chopper`
+description, so the same numbers serve McStas and NeXus:
 
 | | |
 | --- | --- |
@@ -273,8 +274,8 @@ how to write these for your own composite, is in
 
 ### Writing your own
 
-The shape to copy is `niess/components/chopper.py::MultiSlitChopper`: a subclass whose
-`to_mccode` calls `assembler.component(...)` once per instance and tags each one.
+The shape to copy is `niess/components/chopper.py::DiscChopper.to_mccode`: it calls
+`assembler.component(...)` once per instance and tags each one.
 
 !!! danger "Tag every instance you build by hand"
 
