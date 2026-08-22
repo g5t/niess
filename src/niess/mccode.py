@@ -157,6 +157,12 @@ def add_niess_metadata(
         rotation = None if turn is None else turn()
         if rotation is not None and any(abs(a) > 0 for a in rotation):
             extra = dict(extra or {}) | {'mccode_frame_rotation': list(rotation)}
+        shift = getattr(source, '__mccode_offset__', None)
+        displacement = None if shift is None else [
+            float(v) for v in shift().to(unit='m').value
+        ]
+        if displacement is not None and any(abs(v) > 0 for v in displacement):
+            extra = dict(extra or {}) | {'mccode_frame_offset': displacement}
 
     if source_type is None or source_name is None:
         raise ValueError('Both source_type and source_name must be defined')

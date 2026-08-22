@@ -171,12 +171,18 @@ class NXOrient:
     For a component emitted turned relative to the object it describes -- a disc chopper,
     whose McCode component has to be turned for its disc to land on the right side of the
     beam -- the resolved rotation is the emitted one, and what belongs in the file is the
-    object's own. Passing it here keeps the position stack untouched."""
+    object's own."""
+    position: object | None = None
+    """Position stack to use in place of the resolved one.
+
+    The same again for where a component sits: a disc chopper's McCode origin is on the
+    beam, because that is where its component expects to be, while the disc itself is
+    centred on its spindle. The file records the spindle."""
 
     def __post_init__(self):
         self.parts = NXParts(
             self.context,
-            self.orient.position_parts(),
+            self.orient.position_parts() if self.position is None else self.position,
             self.orient.rotation_parts() if self.rotation is None else self.rotation,
         )
 

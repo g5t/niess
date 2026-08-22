@@ -84,22 +84,31 @@ straddles the mark, and `[-85, 85]` says so more plainly than `[275, 445]`. The 
 writer shifts them into `[0, 360)`, where the `NXdisk_chopper` convention applies, and
 writes `top_dead_center` and `beam_position` alongside them so the frame is recorded.
 
-### The emitted `ROTATED` is not the disc's orientation
+### The emitted `AT` and `ROTATED` are not the disc's placement
 
-McStas' `DiskChopper` always puts its disc *below* its own component origin, so the
-emitted component is turned by `zero_angle + beam_angle` about z for the disc to land on
-the right side of the beam. That turn is a property of the target, not of the chopper.
+A McStas `DiskChopper` expects its component origin **on the beam**, and always draws its
+disc *below* that origin. So the emitted component is both moved — by `beam_offset()`,
+from the spindle onto the beam — and turned, by `zero_angle + beam_angle` about z, for the
+disc to land on the right side. Both are properties of the target, not of the chopper.
 
-It is recorded in the component's provenance as `mccode_frame_rotation`, a rotation vector
-in degrees, and `niess.nexus` takes it back out — so an `NXdisk_chopper` carries the
-disc's **own** orientation, and `top_dead_center` means what it says relative to that
-frame. Without it the file would state the turn twice, once as a real rotation of the disc
-and once as `beam_position`, and a reader combining them would place the disc's mark
-`beam_position` degrees from where it is.
+Both are recorded in the component's provenance, as `mccode_frame_offset` (metres) and
+`mccode_frame_rotation` (a rotation vector in degrees), and `niess.nexus` takes them back
+out. An `NXdisk_chopper` is therefore centred on the **spindle**, carrying the disc's own
+orientation — the placement the calibration gave — while McStas still gets the beam
+crossing it needs:
 
-Any component may do this: `Component.__mccode_frame_rotation__` reports the difference
-between `__mccode_orientation__` and `orientation`, and is zero unless a subclass turns
-its emission.
+| | McStas | NeXus |
+| --- | --- | --- |
+| origin | beam crossing | spindle |
+| orientation | `orientation * Rz(zero_angle + beam_angle)` | `orientation` |
+
+Without this the file would state the turn twice, once as a real rotation of the disc and
+once as `beam_position`, and a reader combining them would place the mark `beam_position`
+degrees from where it is; and the disc would sit `radius - height/2` off its own axis.
+
+Any component may do this. `Component.__mccode_offset__` and
+`Component.__mccode_frame_rotation__` report the difference between what is emitted and
+what the object is, and are zero unless a subclass moves or turns its own emission.
 
 `delay` is a time, not an angle: it is when an opening's centre is at the beam, which is
 what McStas' `DiskChopper` acts on and what a real chopper is set with. The component

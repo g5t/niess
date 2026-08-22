@@ -214,6 +214,68 @@ def test_a_component_that_is_not_turned_records_nothing():
     assert 'mccode_frame_rotation' not in NiessProvenance.from_instance(instance).extra
 
 
+def test_the_emitted_displacement_is_recorded_too():
+    """The AT is moved off the spindle for the same reason the ROTATED is turned."""
+    from niess.provenance import NiessProvenance
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    instance = disc.to_mccode(assembler)
+    extra = NiessProvenance.from_instance(instance).extra
+    assert extra['mccode_frame_offset'] == pytest.approx([0.0, -DELTA_Y, 0.0])
+
+
+def test_nexus_puts_the_disc_on_its_spindle():
+    """A McStas DiskChopper's origin is on the beam, because that is where its component
+    expects to be. An NXdisk_chopper is centred on the disc, so the file records the
+    spindle -- the point the calibration actually gave.
+    """
+    from niess.nexus import to_nexus_structure
+    disc = DiscChopper.from_calibration(calibration(beam_angle=scalar(180.0, unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    instance = disc.to_mccode(assembler, at='origin', rotate='origin')
+
+    # McStas gets the beam crossing, 0.32 m below the spindle
+    assert [float(str(v)) for v in instance.at_relative[0]] == \
+        pytest.approx([0.0, -DELTA_Y, 5.0], abs=1e-12)
+
+    body = next(c for c in to_nexus_structure(assembler.instrument,
+                                              origin='origin')['children'][0]['children'][0]['children']
+                if c.get('name') == 'chopper')
+    placed = {(t.get('config') or {}).get('name'): (t.get('config') or {}).get('values')
+              for ch in body['children'] if ch.get('name') == 'transformations'
+              for t in ch['children']}
+    assert [placed.get(f'chopper_t0_{k}', 0.0) for k in 'xyz'] == \
+        pytest.approx([0.0, 0.0, 5.0], abs=1e-12)
+
+
+def test_the_spindle_is_recovered_against_a_rotated_reference():
+    """Where a naive subtraction would go wrong.
+
+    The displacement is added to the position in whatever frame the component was placed
+    against, so it has to come back out of the same quantity -- not out of a resolved
+    absolute position, which a rotated reference has already turned.
+    """
+    from niess.nexus import to_nexus_structure
+    tilt = rotations_from_rotvecs(vector(value=[0.0, 37.0, 0.0], unit='deg'))
+    disc = DiscChopper.from_calibration(calibration(
+        orientation=tilt, beam_angle=scalar(180.0, unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('ref', 'Arm', at=((1., 2., 3.), 'ABSOLUTE'),
+                        rotate=((0., 20., 0.), 'ABSOLUTE'))
+    disc.to_mccode(assembler, at='ref', rotate='ref')
+
+    body = next(c for c in to_nexus_structure(assembler.instrument,
+                                              origin='ref')['children'][0]['children'][0]['children']
+                if c.get('name') == 'chopper')
+    placed = {(t.get('config') or {}).get('name'): (t.get('config') or {}).get('values')
+              for ch in body['children'] if ch.get('name') == 'transformations'
+              for t in ch['children']}
+    # the spindle, in the reference's frame, exactly as the calibration gave it
+    assert [placed.get(f'chopper_t0_{k}', 0.0) for k in 'xyz'] == \
+        pytest.approx([0.0, 0.0, 5.0], abs=1e-12)
+
+
 def test_nexus_records_the_discs_own_orientation():
     """Not the turned one it is emitted with.
 
