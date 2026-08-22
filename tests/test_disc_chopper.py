@@ -169,6 +169,112 @@ def test_a_disc_writes_its_openings_to_nexus_in_the_mark_frame():
     assert found['slit_angle'] == 170.0
 
 
+# -- the McStas frame twist stays in McStas ------------------------------------
+
+def nexus_body(disc, name='chopper'):
+    from niess.nexus import to_nexus_structure
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    disc.to_mccode(assembler)
+    structure = to_nexus_structure(assembler.instrument, origin='origin')
+    return next(c for c in structure['children'][0]['children'][0]['children']
+                if c.get('name') == name)
+
+
+def nexus_rotations(body):
+    return [round((t.get('config') or {}).get('values'), 9)
+            for child in body['children'] if child.get('name') == 'transformations'
+            for t in child['children']
+            if t.get('attributes')
+            and any(a.get('values') == 'rotation' for a in t['attributes'])]
+
+
+def test_the_emitted_turn_is_recorded_as_provenance():
+    """It is the one thing an adapter reading the instrument back cannot work out.
+
+    The emitted ROTATED is `orientation * Rz(zero_angle + beam_angle)`, and nothing in the
+    component line says which part of it is the disc and which is McStas' insistence that
+    a disc hangs below its own origin.
+    """
+    from niess.provenance import NiessProvenance
+    disc = DiscChopper.from_calibration(calibration(
+        zero_angle=scalar(30.0, unit='deg'), beam_angle=scalar(75.0, unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    instance = disc.to_mccode(assembler)
+    extra = NiessProvenance.from_instance(instance).extra
+    assert extra['mccode_frame_rotation'] == pytest.approx([0.0, 0.0, 105.0])
+
+
+def test_a_component_that_is_not_turned_records_nothing():
+    """The key is absent rather than zero, so it means something when it is there."""
+    from niess.provenance import NiessProvenance
+    disc = DiscChopper.from_calibration(calibration())   # both angles default to zero
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    instance = disc.to_mccode(assembler)
+    assert 'mccode_frame_rotation' not in NiessProvenance.from_instance(instance).extra
+
+
+def test_nexus_records_the_discs_own_orientation():
+    """Not the turned one it is emitted with.
+
+    A disc whose calibration says it is not rotated at all must not arrive in the file
+    rotated by 105 degrees, which is what `zero_angle + beam_angle` puts into the emitted
+    component. 105 is chosen because no sign error or axis swap maps it onto itself.
+    """
+    disc = DiscChopper.from_calibration(calibration(
+        angle=scalar(20.0, unit='deg'),   # narrow, so its edges need no wrapping
+        zero_angle=scalar(30.0, unit='deg'), beam_angle=scalar(75.0, unit='deg')))
+    # the emitted component really does carry the turn
+    assert emitted(disc)[1] == pytest.approx([0.0, 0.0, 105.0])
+    # and the file does not
+    body = nexus_body(disc)
+    assert nexus_rotations(body) == []
+    found = {(ch.get('config') or {}).get('name'): (ch.get('config') or {}).get('values')
+             for ch in body['children']}
+    assert found['top_dead_center'] == 30.0
+    assert found['beam_position'] == 75.0
+    assert found['slit_edges'] == [65.0, 85.0]
+
+
+def test_a_turned_disc_matches_a_component_placed_where_it_really_is():
+    """The strongest form of the check: same rotation chain as an untwisted stand-in."""
+    from niess.nexus import to_nexus_structure
+    from niess.spatial import mccode_ordered_angles
+    tilt = rotations_from_rotvecs(vector(value=[0.0, -12.5, 0.0], unit='deg'))
+    disc = DiscChopper.from_calibration(calibration(
+        orientation=tilt, beam_angle=scalar(180.0, unit='deg')))
+
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    disc.to_mccode(assembler)
+    # a stand-in at the same point, carrying the disc's physical orientation
+    assembler.component(
+        'reference', 'Arm',
+        at=(tuple((disc.position + disc.beam_offset()).to(unit='m').value), 'ABSOLUTE'),
+        rotate=(tuple(mccode_ordered_angles(tilt)), 'ABSOLUTE'))
+
+    structure = to_nexus_structure(assembler.instrument, origin='origin')
+    kids = {c.get('name'): c for c in structure['children'][0]['children'][0]['children']}
+    assert nexus_rotations(kids['chopper']) == nexus_rotations(kids['reference'])
+    assert nexus_rotations(kids['chopper']) != []      # or the comparison is vacuous
+
+
+def test_every_opening_of_a_split_disc_is_untwisted():
+    """Each instance carries the same turn, so each has to have it taken back out."""
+    disc = DiscChopper.from_calibration(calibration(
+        beam_angle=scalar(180.0, unit='deg'),
+        windows=array(values=[95.0, 115.0, 245.0, 265.0], dims=['edges'], unit='deg')))
+    from niess.nexus import to_nexus_structure
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    instances = disc.to_mccode(assembler)
+    assert len(instances) == 2
+    structure = to_nexus_structure(assembler.instrument, origin='origin')
+    body = next(c for c in structure['children'][0]['children'][0]['children']
+                if c.get('name') == 'chopper')
+    assert nexus_rotations(body) == []
+
+
 # -- the angles are the only description --------------------------------------
 
 def test_the_angles_are_enough_to_place_the_disc():

@@ -165,12 +165,19 @@ class NXOrient:
     """A resolved ``Orient``, split into separate position and rotation stacks."""
     context: 'NexusContext'
     orient: object
+    rotation: object | None = None
+    """Rotation stack to use in place of the resolved one.
+
+    For a component emitted turned relative to the object it describes -- a disc chopper,
+    whose McCode component has to be turned for its disc to land on the right side of the
+    beam -- the resolved rotation is the emitted one, and what belongs in the file is the
+    object's own. Passing it here keeps the position stack untouched."""
 
     def __post_init__(self):
         self.parts = NXParts(
             self.context,
             self.orient.position_parts(),
-            self.orient.rotation_parts(),
+            self.orient.rotation_parts() if self.rotation is None else self.rotation,
         )
 
     def transformations(self, name: str) -> dict[str, dict]:

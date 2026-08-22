@@ -143,6 +143,24 @@ class Component(Base, kw_only=True):
         """
         return self.orientation
 
+    def __mccode_frame_rotation__(self) -> tuple[float, float, float]:
+        """The turn from this object's own frame to the one it is emitted in.
+
+        ``__mccode_orientation__`` may differ from ``orientation`` where a McCode
+        component's conventions demand it -- a disc chopper's disc always hangs below its
+        component origin, so the whole component is turned for the disc to land on the
+        right side of the beam. That turn is a modelling artefact of the target, not a
+        rotation of the thing, and an adapter reading the emitted instrument cannot tell
+        the two apart unless it is written down. This is where it is written down.
+
+        A rotation vector in degrees, whose direction is the axis and whose length is the
+        angle. Zero for everything that does not override ``__mccode_orientation__``.
+        """
+        from scipy.spatial.transform import Rotation
+        emitted = Rotation.from_quat(self.__mccode_orientation__().value)
+        physical = Rotation.from_quat(self.orientation.value)
+        return tuple(float(a) for a in (physical.inv() * emitted).as_rotvec(degrees=True))
+
     def to_mccode(
             self, assembler: Assembler,
             at: Instance | str | None = None, rotate: Instance | str | None = None,
