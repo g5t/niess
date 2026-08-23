@@ -25,7 +25,7 @@ jobs:
       - uses: actions/configure-pages@v6
 
       - name: Install niess and the documentation toolchain
-        run: pip install -e ".[docs,test]"
+        run: pip install -e ".[docs,test,examples]"
 
       # The site's examples are executable modules asserting their own claims. Running
       # them here as well as in the test job means broken documentation fails the job

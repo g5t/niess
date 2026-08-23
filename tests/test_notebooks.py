@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from .optional_dependencies import skipping_missing_optionals
+
 nbformat = pytest.importorskip('nbformat')
 nbclient = pytest.importorskip('nbclient')
 
@@ -52,7 +54,11 @@ def test_every_notebook_runs(notebook, tmp_path):
         book, timeout=1800, kernel_name='python3',
         resources={'metadata': {'path': str(notebook.parent)}},
     )
-    client.execute()
+    # The scan above catches what a notebook imports by name; it cannot catch an extra
+    # reached from inside niess, as `niess.tof` reaches `tof`. That one surfaces as a
+    # failing cell, so the traceback gets the same reading as a docs example's ImportError.
+    with skipping_missing_optionals():
+        client.execute()
 
 
 @pytest.mark.parametrize('notebook', NOTEBOOKS, ids=lambda p: p.stem)
