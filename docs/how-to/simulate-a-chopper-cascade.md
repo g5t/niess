@@ -1,0 +1,91 @@
+# Simulate a chopper cascade with `tof`
+
+[`tof`](https://scipp.github.io/tof/) is a lightweight straight-line Monte Carlo from the
+scipp developers, for chopper-cascade diagrams. It assumes neutrons travel in straight
+lines and simulates neither absorption nor scattering — it will never replace McStas, and
+it answers "what does my chopper train let through?" in a second rather than a coffee
+break.
+
+`niess.tof` builds a ready-to-run `tof.Model` from an instrument you have already
+assembled, so the train does not have to be retyped.
+
+```sh
+pip install 'niess[tof]'
+```
+
+## Build a model
+
+--8<-- "tof_model.py:build"
+
+```
+TofSetup: 1 chopper(s), 2 detector(s)
+  chopper  chopper                        14.000 Hz anticlockwise  1 opening(s) at   6.8100 m
+  detector monitor
+  detector sample_origin
+
+  parameters used (override with with_values(...)):
+    chopperspeed                 = 14.0 Hz  (default)  <- chopper.speed
+    chopperdelay                 = 0.0 s  (default)  <- chopper.delay
+  nothing has to be provided; every value came from the instrument itself.
+```
+
+Every monitor becomes a `tof.Detector`, and so does the sample — the places a cascade
+diagram usually wants a curve. Distances are walked **along the beam**, following a curved
+guide rather than cutting across it, and offset by the source's own distance because `tof`
+measures every component from the same zero as its source.
+
+## What you need to provide
+
+Usually nothing, which is what the table says. niess declares each chopper's speed and
+delay as an instrument parameter carrying the calibration's own value, so a model built
+from a niess instrument is already the machine as calibrated.
+
+The knobs are listed anyway, because knowing which ones exist is the point of asking, and
+the report names *what read each one* — so a value that looks wrong can be traced to the
+component that used it. Turn one with:
+
+--8<-- "tof_model.py:override"
+
+`with_values` rebuilds from the same instrument, so the report then marks `chopperspeed` as
+given rather than defaulted.
+
+Anything the walk left out — a Fermi chopper, a disc whose description did not reduce to
+numbers — is listed too, rather than quietly missing.
+
+## Where the numbers come from
+
+The same place `niess.chopcalc` gets them: the emitted instrument, read through niess
+provenance. chopcalc extracts a chopper train to narrow a source's wavelength band, and
+emits parameter *names* so the band recomputes at run time. `tof` configures one specific
+machine, so `niess.tof` reuses that extraction and evaluates it — which means the disc
+grouping, the beam-path walk and the opening-angle conventions are shared with chopcalc
+rather than written a second time.
+
+The one thing that is not shared is the conversion into `tof`'s own description, because
+the two disagree about how a chopper is specified:
+
+| | niess | `tof` |
+| --- | --- | --- |
+| speed | signed, the sign is the direction | non-negative, direction is separate |
+| timing | `delay`, in seconds | `phase`, an angle |
+| angles | from the disc's zero mark | from the beam |
+
+A delay is a *time*, so it delays the opening whichever way the disc turns, and the phase
+angle it becomes — `360 · |speed| · delay` — carries **no** sign flip. A NeXus phase is an
+angle in the disc's rotating frame and does flip, which is why `tof.Chopper.from_nexus`
+negates it for a negative speed. Conflating the two is the inviting mistake, so the
+conversion is pinned by checking `tof.Chopper.open_close_times()` against niess' own rule
+for both directions on an asymmetric disc, where nothing lands back on itself.
+
+## Staying offline
+
+Building the source downloads a pulse profile on first use, cached afterwards. The profile
+follows the instrument's own name — `bifrost` gets `ess-bifrost`, an instrument without one
+falls back to `ess`. Pass your own source to avoid the download entirely:
+
+```python
+setup = to_tof_model(assembler, source=tof.Source.from_neutrons(...))
+```
+
+The instrument's `Lmin`/`Lmax` are then not consulted, and the report says so by not
+listing them.

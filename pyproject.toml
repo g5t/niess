@@ -35,6 +35,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ['pytest']
+# niess.tof sets up a tof.Model from an emitted instrument; niess imports without it.
+tof = ['tof>=25.11']
 # Zensical is pre-1.0 and ships weekly; pin exactly and bump deliberately.
 docs = [
   'zensical==0.0.56',
