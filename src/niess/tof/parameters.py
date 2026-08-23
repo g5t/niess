@@ -55,13 +55,15 @@ class ParameterValues:
         self.instrument = instrument
         self.defaults = instrument_defaults(instrument)
         self.units = instrument_units(instrument)
-        self.overrides = {} if overrides is None else dict(overrides)
-        unknown = set(self.overrides) - {p.name for p in instrument.parameters}
+        overrides = {} if overrides is None else dict(overrides)
+        unknown = set(overrides) - {p.name for p in instrument.parameters}
         if unknown:
             raise ValueError(
                 f'{sorted(unknown)} are not instrument parameters of '
                 f'{instrument.name!r}; it has {sorted(p.name for p in instrument.parameters)}'
             )
+        self.overrides = {name: self._as_declared(name, value)
+                          for name, value in overrides.items()}
         self.values = {**self.defaults, **self.overrides}
         self._uses: dict[str, set[str]] = {}
 
@@ -85,6 +87,28 @@ class ParameterValues:
             return expr_float(folded)
         except (TypeError, ValueError):
             return None
+
+    def _as_declared(self, name: str, value):
+        """An override as a plain number, in the unit the instrument declares.
+
+        A chopper speed calculated elsewhere arrives as a scipp scalar carrying its own
+        unit -- and a calculator is as entitled to hand back a period in milliseconds or a
+        speed in rpm as it is to match what the instrument happens to say. The instrument
+        knows what it wants, so convert rather than making the caller strip the unit and
+        hope the two agree.
+        """
+        if not hasattr(value, 'unit'):
+            return float(value)
+        declared = self.units.get(name)
+        if declared is None:
+            return float(value.value)
+        try:
+            return float(value.to(unit=declared, dtype='float64').value)
+        except Exception as error:
+            raise ValueError(
+                f'{name} is declared in {declared!r} and {value.unit} does not convert '
+                f'to it'
+            ) from error
 
     def evaluate_text(self, text, *, used_by: str | None = None) -> float | None:
         """A `chopcalc` field -- C text naming instrument parameters -- as a number.

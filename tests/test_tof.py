@@ -302,3 +302,90 @@ def test_the_facility_profile_follows_the_instrument_name(monkeypatch):
     assert _facility_for(Fake('bifrost'), real) == 'ess-bifrost'
     assert _facility_for(Fake('cspec'), real) == 'ess-cspec'
     assert _facility_for(Fake('teaching'), real) == 'ess'
+
+
+# -- instruments that move --------------------------------------------------------
+
+def movable_instrument():
+    """A monitor placed against a run-time angle, as a rotating detector tank is."""
+    from mccode_antlr.common import Expr, InstrumentParameter
+    assembler = Assembler('movable', flavor=Flavor.MCSTAS)
+    assembler.parameter(InstrumentParameter.parse('a4/"degree"=90'))
+    assembler.parameter('source_lambda_min/"angstrom"=0.75')
+    assembler.parameter('source_lambda_max/"angstrom"=10.0')
+    assembler.component('source', 'ESS_butterfly', at=((0, 0, 0), 'ABSOLUTE'),
+                        parameters={'Lmin': 'source_lambda_min',
+                                    'Lmax': 'source_lambda_max'})
+    disc(14.0).to_mccode(assembler, at='source', rotate='source')
+    fixed = assembler.component('fixed_monitor', 'TOF_monitor',
+                                at=((0, 0, 8.0), 'source'))
+    turntable = assembler.component('turntable', 'Arm', at=((0, 0, 9.0), 'source'),
+                                    rotate=((0, Expr.parameter('a4'), 0), 'source'))
+    assembler.component('moving_monitor', 'TOF_monitor', at=((0, 0, 1.0), turntable))
+    return assembler
+
+
+def test_a_component_that_moves_is_left_out_rather_than_fatal():
+    """Its distance along the beam is not a number until the simulation runs.
+
+    `tof` flies neutrons to a fixed distance, so it has nothing to say about a detector on
+    a tank that rotates -- but the rest of the instrument is still worth modelling, and
+    used to be lost with it.
+    """
+    setup = to_tof_model(movable_instrument(), source=offline_source())
+    assert 'fixed_monitor' in setup.detectors
+    assert 'moving_monitor' not in setup.detectors
+    assert len(setup.choppers) == 1
+    assert any('moving_monitor' in note for note in setup.notes)
+
+
+def test_the_last_detector_is_the_furthest_that_can_be_measured():
+    """Not the beam path's end, which on a moving instrument cannot be placed.
+
+    `turntable` is the furthest point that still can be: only its *rotation* depends on
+    the run-time angle, so it sits at a known distance, and the monitor mounted on it does
+    not. On BIFROST the same rule picks `sample_origin`, which is likewise an Arm.
+    """
+    setup = to_tof_model(movable_instrument(), source=offline_source())
+    assert setup.detectors[-1] == 'turntable'
+    assert 'moving_monitor' not in setup.detectors
+
+
+def test_an_expression_that_does_not_reduce_says_so_as_a_value_error():
+    """`Expr.value` raises NotImplementedError, and `hasattr` does not catch it.
+
+    So asking whether an expression had a value used to raise straight through every
+    caller -- and every caller in niess spells "this names a run-time parameter, skip it"
+    as catching TypeError/ValueError.
+    """
+    from mccode_antlr.common.expression import Expr
+    from niess.dispatch import expr_float
+
+    assert expr_float(Expr.parse('3 * 4')) == pytest.approx(12.0)
+    with pytest.raises(ValueError):
+        expr_float(Expr.parse('a4 * 2'))
+
+
+# -- values arrive with their own units -------------------------------------------
+
+@pytest.mark.parametrize('given,expected', [
+    (70.0, 70.0),
+    (sc.scalar(70.0, unit='Hz'), 70.0),
+    (sc.scalar(0.07, unit='kHz'), 70.0),
+])
+def test_a_speed_is_converted_to_what_the_instrument_declares(given, expected):
+    """A calculator is entitled to hand back kHz; the instrument says Hz."""
+    setup = teaching_setup(values={'chopperspeed': given})
+    assert setup.choppers[0].frequency == pytest.approx(expected)
+
+
+def test_a_delay_in_milliseconds_is_converted_to_seconds():
+    setup = teaching_setup(values={'chopperdelay': sc.scalar(17.0, unit='ms')})
+    assert setup.choppers[0].phase == pytest.approx(delay_to_phase(0.017, 14.0))
+    assert next(u for u in setup.parameters
+                if u.name == 'chopperdelay').value == pytest.approx(0.017)
+
+
+def test_a_value_in_the_wrong_unit_is_refused_by_name():
+    with pytest.raises(ValueError, match="chopperspeed is declared in 'Hz'"):
+        teaching_setup(values={'chopperspeed': sc.scalar(1.0, unit='m')})

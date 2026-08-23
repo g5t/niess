@@ -171,17 +171,33 @@ def _build_source(instrument, source_instance, values, tof, *, neutrons, pulses,
     return tof.Source(facility=facility, neutrons=int(neutrons), **kwargs), facility
 
 
-def _sample_name(graph, instrument, given: str | None) -> str | None:
-    """Where the beam ends, which is where a chopper cascade is usually aimed.
+def _furthest_measurable(graph, places, source_name, instrument, given: str | None):
+    """Where to put the last detector: the end of the beam that can still be measured.
 
-    The source is the one root of the particle flow graph; the sample is the one sink. When
-    that is ambiguous the caller says which, and when there is none there is simply no
-    sample detector.
+    Not the flow graph's sink, which is only the sample on an instrument that stops there.
+    A secondary spectrometer keeps going, and its components are usually placed against a
+    run-time angle -- a tank that rotates -- so their distance along the beam is not a
+    number until the simulation runs. `tof` flies neutrons in a straight line to a fixed
+    distance, so it has nothing to say about those.
+
+    The furthest component whose path from the source *does* resolve is the end of the
+    part `tof` can model, and on a direct-geometry instrument that is the sample.
     """
     if given is not None:
         return given
-    sinks = [n for n in graph.nodes if graph.out_degree(n) == 0]
-    return sinks[0] if len(sinks) == 1 else None
+    furthest, best = None, None
+    for instance in instrument.components:
+        if instance.name == source_name:
+            continue
+        try:
+            path = beam_path_length(graph, places, source_name, instance.name)
+        except Exception:
+            # any reason the path cannot be measured -- a run-time position, no route --
+            # means this is not somewhere tof can put a detector
+            continue
+        if best is None or path > best:
+            furthest, best = instance.name, path
+    return furthest
 
 
 def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
@@ -282,7 +298,8 @@ def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
         if getattr(built, 'kind', None) == 'detector':
             detector_names.append(built.name)
 
-    sample_at = _sample_name(graph, instrument, sample)
+    sample_at = _furthest_measurable(graph, places, source_instance.name,
+                                     instrument, sample)
     if sample_at is not None and sample_at not in detector_names:
         try:
             distance = origin + beam_path_length(graph, places, source_instance.name,
