@@ -19,6 +19,7 @@ nav = [
     { "Build a new instrument submodule" = "how-to/new-instrument-submodule.md" },
     { "Produce NeXus Structure JSON" = "how-to/nexus-structure.md" },
     { "Narrow the wavelength band" = "how-to/narrow-the-wavelength-band.md" },
+    { "Simulate a chopper cascade" = "how-to/simulate-a-chopper-cascade.md" },
     { "Write NeXus translators" = "how-to/custom-nexus-registry.md" },
   ] },
   { "Reference" = [
@@ -26,6 +27,7 @@ nav = [
     { "Command line" = "reference/cli.md" },
     { "API: niess.nexus" = "reference/api/nexus.md" },
     { "API: niess.dispatch" = "reference/api/dispatch.md" },
+    { "API: niess.tof" = "reference/api/tof.md" },
   ] },
   { "Explanation" = [
     { "moreniius parity" = "explanation/moreniius-parity.md" },

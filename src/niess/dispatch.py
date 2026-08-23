@@ -107,12 +107,32 @@ def component_type_category(instance) -> str | None:
 
 
 def expr_float(value):
+    """A plain float out of a McCode ``Expr``, or ``ValueError`` if it is not one.
+
+    ``hasattr(expr, 'value')`` is not the test it looks like: ``Expr.value`` is a property
+    that *raises* for anything not constant, and ``hasattr`` only swallows
+    ``AttributeError``, so asking whether an expression has a value used to raise
+    ``NotImplementedError`` straight through every caller. Every caller catches
+    ``TypeError``/``ValueError`` -- that is what "this names a run-time parameter, skip it"
+    is spelled as throughout niess -- so an expression that does not reduce says so that
+    way.
+    """
     if isinstance(value, (int, float)):
         return float(value)
     simplified = value.simplify() if hasattr(value, 'simplify') else value
-    if hasattr(simplified, 'value') and isinstance(simplified.value, (int, float)):
-        return float(simplified.value)
-    return float(simplified)
+    try:
+        held = simplified.value
+    except (AttributeError, NotImplementedError):
+        held = None
+    if isinstance(held, (int, float)):
+        return float(held)
+    try:
+        return float(simplified)
+    except (AttributeError, NotImplementedError, TypeError) as error:
+        raise ValueError(
+            f'{simplified!r} does not reduce to a number; it depends on something only '
+            f'known at run time'
+        ) from error
 
 
 def merged_params(instance, params: dict[str, float] | None = None) -> dict[str, float]:

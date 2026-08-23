@@ -18,6 +18,12 @@ from pathlib import Path
 
 import pytest
 
+from .optional_dependencies import (
+    OPTIONAL_MODULES,
+    missing_optional,
+    skipping_missing_optionals,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
 EXAMPLES = DOCS / 'examples'
@@ -35,14 +41,57 @@ def example_paths():
 
 @pytest.mark.parametrize('path', example_paths(), ids=lambda p: p.stem)
 def test_example_runs(path, tmp_path, monkeypatch):
-    """Every example executes and its own assertions hold."""
+    """Every example executes and its own assertions hold.
+
+    An example resting on an extra -- `tof_model.py` on `tof` -- skips where the extra is
+    not installed, and only for that reason: the skip is decided by which module the
+    ImportError names, so an example broken any other way still fails here.
+    """
     spec = importlib.util.spec_from_file_location(f'docs_example_{path.stem}', path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
 
-    assert hasattr(module, 'main'), f'{path.name} must define main(outdir)'
-    monkeypatch.chdir(tmp_path)
-    module.main(tmp_path)
+    with skipping_missing_optionals():
+        spec.loader.exec_module(module)
+
+        assert hasattr(module, 'main'), f'{path.name} must define main(outdir)'
+        monkeypatch.chdir(tmp_path)
+        module.main(tmp_path)
+
+
+def test_only_a_declared_extra_earns_a_skip():
+    """The skip must not be able to swallow a real failure.
+
+    It reads the module out of the ImportError, so an extra that is absent skips and
+    anything else -- a typo in a niess import, a module that never existed -- still fails.
+    Both are ImportErrors and only the declared name is excused.
+    """
+    absent = ModuleNotFoundError("No module named 'tof'", name='tof')
+    assert missing_optional(absent) == 'tof'
+    assert missing_optional(ModuleNotFoundError("No module named 'niess.toff'",
+                                                name='niess.toff')) is None
+    assert missing_optional(ValueError('nothing to do with imports')) is None
+
+
+def test_the_extra_is_found_behind_a_helper_that_re_raises():
+    """`niess.tof._tof()` replaces the ImportError with advice, losing `.name`.
+
+    That is the shape the docs example actually fails in, so the chain has to be followed
+    rather than only the exception that arrives.
+    """
+    try:
+        try:
+            raise ModuleNotFoundError("No module named 'tof'", name='tof')
+        except ImportError as error:
+            raise ImportError("niess.tof needs the 'tof' package") from error
+    except ImportError as error:
+        assert error.name is None
+        assert missing_optional(error) == 'tof'
+
+
+def test_the_extras_are_read_from_the_packaging():
+    """A package that stops being optional stops being skippable, in the same commit."""
+    assert 'tof' in OPTIONAL_MODULES
+    assert 'scipp' not in OPTIONAL_MODULES, 'scipp is a hard dependency'
 
 
 def test_there_are_examples_to_run():

@@ -48,6 +48,7 @@ def narrow_source_wavelengths(
         skip=(),
         path_lengths=None,
         latest_emission: float | None = None,
+        graph=None,
         export_choppers: str | None = None,
         export_chopper_count: str | None = None,
         registry: str = CHOPPER_LIB_REGISTRY,
@@ -83,6 +84,11 @@ def narrow_source_wavelengths(
     export_chopper_count:
         The ``int`` in DECLARE holding how many rows were published. Defaults to
         ``f'{export_choppers}_count'``.
+    graph:
+        The particle flow through the instrument, as a ``networkx`` DiGraph. McCode
+        cannot say that a beam branches, so an instrument whose flow is not the order its
+        components are declared in has to be handed the real one. Built from the
+        instrument when omitted.
     strict:
         Raise :class:`ChopcalcError` instead of warning and doing nothing. Worth passing
         alongside ``export_choppers``: a component that reads the train needs it to exist,
@@ -110,7 +116,8 @@ def narrow_source_wavelengths(
     try:
         export = _export_names(instrument, export_choppers, export_chopper_count)
         train = build_train(instrument, source=source, skip=skip,
-                            path_lengths=path_lengths, latest_emission=latest_emission)
+                            path_lengths=path_lengths, latest_emission=latest_emission,
+                            graph=graph)
     except ChopcalcError as error:
         return _refuse(str(error), strict)
     train = dataclasses.replace(train, export=export)
