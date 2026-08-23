@@ -57,7 +57,7 @@ instr2ns = "niess.nexus.cli:convert"
 Documentation = "https://mcdotstar.github.io/niess/"
 Issues = "https://github.com/mcdotstar/niess/issues"
 Source = "https://github.com/mcdotstar/niess"
-Changelog = "https://github.com/mcdotstar/niess/releases"
+Changelog = "https://mcdotstar.github.io/niess/release-notes/"
 
 [tool.hatch.version]
 path = "src/niess/__about__.py"

@@ -94,6 +94,24 @@ def test_the_extras_are_read_from_the_packaging():
     assert 'scipp' not in OPTIONAL_MODULES, 'scipp is a hard dependency'
 
 
+def test_the_changelog_names_the_version_being_released():
+    """A release whose notes are headed by the previous version is worse than none.
+
+    The changelog is included into the documentation site and copied into the GitHub
+    release, so the number at its top is the one users will read as theirs. Nothing else
+    checks that it moved when `__about__.py` did.
+    """
+    changelog = (ROOT / 'CHANGELOG.md').read_text()
+    latest = re.search(r'^## (\d+\.\d+\.\d+)', changelog, re.M)
+    assert latest, 'the changelog has no released version'
+
+    about = (ROOT / 'src' / 'niess' / '__about__.py').read_text()
+    version = re.search(r'__version__ = "([^"]+)"', about)
+    assert latest.group(1) == version.group(1), (
+        f'changelog is headed {latest.group(1)}, niess is {version.group(1)}'
+    )
+
+
 def test_there_are_examples_to_run():
     """Guard against the glob silently matching nothing."""
     assert example_paths(), f'no examples found in {EXAMPLES}'
