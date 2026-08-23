@@ -29,6 +29,7 @@ nav = [
     { "API: niess.dispatch" = "reference/api/dispatch.md" },
     { "API: niess.tof" = "reference/api/tof.md" },
   ] },
+  { "Release notes" = "release-notes.md" },
   { "Explanation" = [
     { "moreniius parity" = "explanation/moreniius-parity.md" },
   ] },
