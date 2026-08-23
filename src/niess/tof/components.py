@@ -217,6 +217,18 @@ def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
         facility's pulse profile on first use, so pass your own to stay offline.
     values:
         Instrument parameter values to use instead of the instrument's own defaults.
+        A scipp scalar is converted to whatever unit the instrument declares, so a speed
+        worked out in kHz or a delay in ms can be handed over as it comes.
+    neutrons:
+        How many to sample from each pulse.
+    pulses:
+        How many source pulses to simulate. More than one is what shows a chopper turning
+        at a fraction of the source frequency doing its job: a disc at half of 14 Hz opens
+        for every other pulse and absorbs the rest, which a single pulse cannot show.
+        Taken from the source when omitted.
+    seed:
+        Fixes the sampling, so two runs can be compared rather than merely resembling
+        each other.
     sample:
         The component to put a detector on at the end of the beam. Found from the beam
         path when omitted.

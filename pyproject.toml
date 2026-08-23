@@ -37,6 +37,10 @@ dependencies = [
 test = ['pytest']
 # niess.tof sets up a tof.Model from an emitted instrument; niess imports without it.
 tof = ['tof>=25.11']
+# What the notebooks under docs/examples need to run, over and above niess itself.
+# chopcal is here rather than in `tof` because niess.tof does not import it -- only the
+# BIFROST notebook does, for the chopper geometry it knows and niess does not.
+examples = ['tof>=25.11', 'chopcal>=0.5.1', 'nbclient', 'nbformat']
 # Zensical is pre-1.0 and ships weekly; pin exactly and bump deliberately.
 docs = [
   'zensical==0.0.56',

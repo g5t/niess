@@ -52,6 +52,25 @@ given rather than defaulted.
 Anything the walk left out — a Fermi chopper, a disc whose description did not reduce to
 numbers — is listed too, rather than quietly missing.
 
+## Simulating more than one pulse
+
+A chopper turning at a fraction of the source frequency does nothing visible in a single
+pulse, because a single pulse is the one it lets through. `pulses=` runs several:
+
+```python
+setup = to_tof_model(assembler, pulses=2)
+counts = setup.model.run().detectors['sample_origin'].toa.data
+```
+
+At ESS' 14 Hz, a bandwidth disc at 14 Hz opens once per pulse and passes them all, while
+the same disc at 7 Hz opens for every other one and absorbs the rest — the second pulse
+arrives at a closed disc and the count for it is zero. That is pulse skipping, and seeing
+it is the reason to ask for more than one pulse.
+
+`neutrons=` sets how many are sampled from each pulse, and `seed=` fixes the sampling so
+two runs differ by what was changed rather than by which neutrons were drawn. Omitting
+`pulses` takes the count from the source.
+
 ## Where the numbers come from
 
 The same place `niess.chopcalc` gets them: the emitted instrument, read through niess
