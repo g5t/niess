@@ -239,9 +239,9 @@ an adapter needs to reverse the split:
 ```
 
 ```
-pack_slit_0    role=nexus-group-primary    group=pack index=0 edges=[-5.0, 5.0]
-pack_slit_1    role=nexus-group-member     group=pack index=1 edges=[85.0, 105.0]
-pack_slit_2    role=nexus-group-member     group=pack index=2 edges=[247.5, 252.5]
+pack_slit_0    role=nexus-group-primary    group=pack index=0 edges=[10.0, 30.0]
+pack_slit_1    role=nexus-group-member     group=pack index=1 edges=[100.0, 140.0]
+pack_slit_2    role=nexus-group-member     group=pack index=2 edges=[350.0, 370.0]
 ```
 
 | what | why |

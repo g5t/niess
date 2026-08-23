@@ -191,8 +191,8 @@ class DiscChopper(Chopper):
         number of strictly increasing edges spanning no more than a revolution. They are
         not required to be positive -- an opening centred on a beam at ``beam_angle = 0``
         straddles the mark, and writing it as ``[-85, 85]`` says so more plainly than
-        ``[275, 445]``. The NeXus writer normalises into ``[0, 360)``, where the
-        ``NXdisk_chopper`` convention actually applies.
+        ``[275, 445]``. ``nexus_slit_edges`` puts them in the order ``NXdisk_chopper``
+        asks for, which is where that convention actually applies.
         """
         edges = [float(v) for v in self.windows.to(unit='deg').values]
         if len(edges) < 2 or len(edges) % 2:

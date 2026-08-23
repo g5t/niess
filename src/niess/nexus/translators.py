@@ -214,6 +214,46 @@ def monitor_translator(t, default_stream: dict | None = None):
     return component_body('NXmonitor', children)
 
 
+def nexus_slit_edges(edges: list[float]) -> list[float]:
+    """Slit edges as ``NXdisk_chopper`` asks for them.
+
+    The standard says: "Angle of each edge of every slit from the position of the
+    top-dead-center timestamp sensor, anticlockwise when facing away from the source. The
+    first edge must be the opening edge of a slit, thus the last edge may have an angle
+    greater than 360 degrees." So: positive, strictly increasing, opening edge first, and
+    only the *final* edge past 360 -- which happens exactly when the last slit crosses the
+    mark.
+
+    ``DiscChopper`` is deliberately looser, because a slit across the mark reads better as
+    ``[-85, 85]`` than as ``[275, 445]`` and one may be written a turn late. Getting from
+    there to here is not a shift of the whole list: the wrap belongs to *one* slit, and
+    adding 360 to every edge carries the slits that were already in range out past it --
+    ``[-10, 10, 60, 90]`` would become ``[350, 370, 420, 450]``, whose third edge is an
+    opening past 360. What is needed is to rotate which slit comes first.
+
+    So each slit's *opening* edge moves into ``[0, 360)`` carrying its width, and the
+    slits are ordered by it. The slit containing the mark is the only one that can wrap,
+    and openings that do not overlap force it to sort last, so "only the final edge
+    exceeds 360" falls out rather than being imposed.
+    """
+    if not edges:
+        return []
+    # `%` on a negative float gives the positive residue in Python, which is what this
+    # wants -- not math.fmod, which keeps the sign of the operand.
+    slits = sorted((opening % 360.0, opening % 360.0 + (closing - opening))
+                   for opening, closing in zip(edges[::2], edges[1::2]))
+    ordered = [edge for slit in slits for edge in slit]
+
+    if any(b <= a for a, b in zip(ordered, ordered[1:])) \
+            or any(not 0.0 <= edge < 360.0 for edge in ordered[:-1]):
+        raise ValueError(
+            f'slit edges {edges} cannot be written as NXdisk_chopper wants them: '
+            f'{ordered} is not increasing with only its last edge past 360 degrees. '
+            f'Openings that overlap each other do this, and a disc cannot have them.'
+        )
+    return ordered
+
+
 # Registered by niess source type rather than by McStas component type: a disc with
 # several openings emits several plain DiskChoppers, and only the provenance says they
 # are one disc. Naming the source type as a string keeps niess.components out of this
@@ -250,12 +290,9 @@ def disc_chopper_translator(t):
         edges = list(t.provenance.extra['slit_edges'])
 
     # NXdisk_chopper geometry: angles measured from the top-dead-centre mark, positive
-    # counter-clockwise facing +z, with a final edge beyond 360 where the last opening
-    # straddles the mark. The component allows an opening written across the mark as a
-    # negative first edge, which is clearer to read; the standard wants them positive,
-    # so shift the pairs into [0, 360) here, where the standard is what applies.
-    if edges and edges[0] < 0.0:
-        edges = [edge + 360.0 for edge in edges]
+    # counter-clockwise facing +z. The component takes a looser description than the
+    # standard does, so put it in order here, where the standard is what applies.
+    edges = nexus_slit_edges(edges)
 
     children = [
         dataset('slits', len(edges) // 2),

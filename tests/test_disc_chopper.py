@@ -169,6 +169,72 @@ def test_a_disc_writes_its_openings_to_nexus_in_the_mark_frame():
     assert found['slit_angle'] == 170.0
 
 
+# -- what NXdisk_chopper asks of the slit edges --------------------------------
+
+def nexus_slit_edges_of(edges):
+    """The `slit_edges` a disc with these `windows` writes into NeXus."""
+    from niess.nexus import to_nexus_structure
+    disc = DiscChopper.from_calibration(calibration(
+        windows=array(values=edges, dims=['edges'], unit='deg')))
+    assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
+    assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
+    disc.to_mccode(assembler, at='origin', rotate='origin')
+    body = next(c for c in to_nexus_structure(assembler.instrument,
+                                              origin='origin')['children'][0]['children'][0]['children']
+                if c.get('name') == 'chopper')
+    return next((ch.get('config') or {}).get('values') for ch in body['children']
+                if (ch.get('config') or {}).get('name') == 'slit_edges')
+
+
+@pytest.mark.parametrize('windows,expected', [
+    # a slit across the mark moves to the END of the list, taking its wrap with it --
+    # shifting the whole list would carry the others out past 360 with it
+    ([-10.0, 10.0, 60.0, 90.0], [60.0, 90.0, 350.0, 370.0]),
+    # ...including when the wrapping slit was written first
+    ([350.0, 370.0, 380.0, 400.0], [20.0, 40.0, 350.0, 370.0]),
+    # a slit written a turn late comes back into range
+    ([370.0, 380.0], [10.0, 20.0]),
+    # a lone slit across the mark is the case where the last edge may pass 360
+    ([-85.0, 85.0], [275.0, 445.0]),
+    # and edges that already conform are left exactly as they are
+    ([10.0, 30.0, 100.0, 140.0, 350.0, 370.0], [10.0, 30.0, 100.0, 140.0, 350.0, 370.0]),
+    ([95.0, 265.0], [95.0, 265.0]),
+])
+def test_slit_edges_are_written_as_the_standard_asks(windows, expected):
+    """"The first edge must be the opening edge of a slit, thus the last edge may have an
+    angle greater than 360 degrees."
+
+    Which makes the wrap a property of one slit rather than of the list, so putting the
+    edges in order means rotating which slit comes first -- not adding 360 to all of them.
+    """
+    assert nexus_slit_edges_of(windows) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize('windows', [
+    [-10.0, 10.0, 60.0, 90.0], [350.0, 370.0, 380.0, 400.0], [370.0, 380.0],
+    [-85.0, 85.0], [10.0, 30.0, 100.0, 140.0, 350.0, 370.0], [95.0, 265.0],
+])
+def test_written_slit_edges_always_satisfy_the_standard(windows):
+    """The properties themselves, rather than the particular numbers."""
+    written = nexus_slit_edges_of(windows)
+    assert all(b > a for a, b in zip(written, written[1:]))     # strictly increasing
+    assert all(0.0 <= edge < 360.0 for edge in written[:-1])    # only the last may pass
+    assert written[-1] < 720.0                                  # and only by one turn
+
+
+def test_pairs_survive_being_reordered():
+    """Rotating the list must not split an opening from its closing edge."""
+    written = nexus_slit_edges_of([-10.0, 10.0, 60.0, 90.0])
+    assert [b - a for a, b in zip(written[::2], written[1::2])] == pytest.approx([30.0, 20.0])
+
+
+def test_openings_that_overlap_are_refused_rather_than_written():
+    """They cannot be put in the standard's order, and a disc cannot have them anyway."""
+    from niess.nexus.translators import nexus_slit_edges
+    with pytest.raises(ValueError, match='overlap'):
+        nexus_slit_edges([0.0, 200.0, 100.0, 300.0])
+
+
 # -- the McStas frame twist stays in McStas ------------------------------------
 
 def nexus_body(disc, name='chopper'):

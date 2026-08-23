@@ -79,10 +79,16 @@ opening centred on the beam, `beam_angle ± angle/2` — so `angle = 170` on a d
 above the beam is `[95, 265]`, whose centre is the beam and whose emitted `delay` is
 therefore the disc's own.
 
-Edges are not required to be positive: an opening centred on a beam at `beam_angle = 0`
-straddles the mark, and `[-85, 85]` says so more plainly than `[275, 445]`. The NeXus
-writer shifts them into `[0, 360)`, where the `NXdisk_chopper` convention applies, and
-writes `top_dead_center` and `beam_position` alongside them so the frame is recorded.
+Edges are not required to be positive, and one may be written a turn late: an opening
+centred on a beam at `beam_angle = 0` straddles the mark, and `[-85, 85]` says so more
+plainly than `[275, 445]`. `NXdisk_chopper` is stricter — positive, increasing, opening
+edge first, and only the *final* edge past 360, which happens exactly when the last slit
+crosses the mark — so the NeXus writer puts them in that order, and writes
+`top_dead_center` and `beam_position` alongside them so the frame is recorded.
+
+That reordering rotates which slit comes first rather than shifting the list: the wrap
+belongs to one slit, so adding 360 to every edge would carry the others out past it.
+`[-10, 10, 60, 90]` is written `[60, 90, 350, 370]`, not `[350, 370, 420, 450]`.
 
 ### The emitted `AT` and `ROTATED` are not the disc's placement
 
