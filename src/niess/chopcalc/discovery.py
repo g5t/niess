@@ -21,7 +21,6 @@ UNSUPPORTED_CHOPPER_TYPES = frozenset({
 })
 ESS_SOURCE_DURATION = 2.857e-3  # seconds; matches niess.components.source
 DEFAULT_LATEST_EMISSION = 3 * ESS_SOURCE_DURATION
-MULTI_SLIT_SOURCE_TYPE = 'MultiSlitChopper'
 OFF_BEAM_TURN = 1.0  # degrees the beam may bend on arrival before it looks like a detour
 
 
@@ -352,8 +351,11 @@ def build_train(instrument, *, source=None, skip=(), path_lengths=None,
                 f'from a different zero. The chopper-train model does not apply.'
             )
 
+        # Grouped on the tag rather than on which Python class emitted it: every disc
+        # records its openings, and only a disc split across several components carries
+        # a group id saying which instances have to be put back together.
         provenance = NiessProvenance.from_instance(instance)
-        if provenance is not None and provenance.source_type.endswith(MULTI_SLIT_SOURCE_TYPE):
+        if provenance is not None and provenance.extra.get('nexus_group_id') is not None:
             groups.setdefault(provenance.extra['nexus_group_id'], []).append(
                 (instance, provenance))
             continue

@@ -11,8 +11,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..dispatch import component_type_category, component_type_name
+from ..dispatch import component_type_category, component_type_name, expr_float
 from ..provenance import NiessProvenance
+from ..spatial import mccode_angles_without_turn
 from . import expression
 from .nodes import (
     absolutize_depends_on,
@@ -77,6 +78,20 @@ NEXUS_CLASS_PARAMETERS = {
         'height': 'yheight',
     },
 }
+
+
+def _vector(values) -> 'Vector':
+    """A McCode position from plain numbers; the struct's fields are expressions."""
+    from mccode_antlr.common import Expr
+    from mccode_antlr.instr.orientation import Vector
+    return Vector(*(Expr.float(float(v)) for v in values))
+
+
+def _angles(values) -> 'Angles':
+    """McCode angles from plain numbers; the struct's fields are expressions."""
+    from mccode_antlr.common import Expr
+    from mccode_antlr.instr.orientation import Angles
+    return Angles(*(Expr.float(float(v)) for v in values))
 
 
 def component_body(
@@ -299,6 +314,32 @@ class NexusContext:
             return depends_on
         return None if depends_on == '.' else f'{target}/{depends_on}'
 
+    def frame_rotation(self, instance):
+        """The turn a component's emitted frame carries that the object's does not.
+
+        ``None`` when there is none, which is everything but a disc chopper today.
+        """
+        provenance = NiessProvenance.from_instance(instance)
+        if provenance is None:
+            return None
+        rotvec = provenance.extra.get('mccode_frame_rotation')
+        if not rotvec or not any(abs(float(a)) > 0 for a in rotvec):
+            return None
+        return [float(a) for a in rotvec]
+
+    def frame_offset(self, instance):
+        """The displacement a component's emitted origin carries that the object's does not.
+
+        ``None`` when there is none, which is everything but a disc chopper today.
+        """
+        provenance = NiessProvenance.from_instance(instance)
+        if provenance is None:
+            return None
+        offset = provenance.extra.get('mccode_frame_offset')
+        if not offset or not any(abs(float(v)) > 0 for v in offset):
+            return None
+        return [float(v) for v in offset]
+
     def transformations(self, instance) -> dict[str, dict]:
         from mccode_antlr.instr.orientation import Angles, Parts, Vector
 
@@ -310,9 +351,37 @@ class NexusContext:
         at_vec = Vector(*at_vec) if isinstance(at_vec, tuple) else at_vec
         rot_vec = Angles(*rot_vec) if isinstance(rot_vec, tuple) else rot_vec
 
+        # A component emitted turned relative to the object it describes says so in its
+        # provenance; the file records the object, so the turn comes back out here. Only
+        # this component's own rotation is corrected -- `self.orientations` keeps the
+        # emitted values, because anything placed RELATIVE to this one was placed against
+        # the emitted frame and has to resolve against it.
+        turn = self.frame_rotation(instance)
+        if turn is not None:
+            rot_vec = _angles(mccode_angles_without_turn(
+                [expr_float(a) for a in rot_vec], turn))
+        # ...and the same for where it sits. The emitted AT is `position + offset`, a
+        # plain sum in whatever frame the component was placed against, so subtracting
+        # the same vector from the same quantity recovers the object's own position.
+        shift = self.frame_offset(instance)
+        if shift is not None:
+            at_vec = _vector(expr_float(a) - b for a, b in zip(at_vec, shift))
+
         trans: list[tuple[str, dict]] = []
         if at_rel is None:
-            orient = NXOrient(self, self.orientations[instance.name] - self.origin)
+            resolved = self.orientations[instance.name] - self.origin
+            orient = NXOrient(
+                self, resolved,
+                rotation=None if turn is None else Parts.from_at_rotated(
+                    Vector(),
+                    _angles(mccode_angles_without_turn(
+                        [expr_float(a) for a in resolved.angles()], turn)),
+                    True),
+                position=None if shift is None else Parts.from_at_rotated(
+                    _vector(expr_float(a) - b
+                            for a, b in zip(resolved.position(), shift)),
+                    Angles(), True),
+            )
             if rot_rel is None:
                 return orient.transformations(instance.name)
             trans.extend(orient.position_transformations(instance.name))

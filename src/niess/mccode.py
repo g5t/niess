@@ -149,6 +149,20 @@ def add_niess_metadata(
     if source is not None:
         source_type = niess_source_type(source)
         source_name = getattr(source, 'name', None) if source_name is None else source_name
+        # Recorded here rather than by each caller: a component whose emitted frame is
+        # turned relative to its own is the one thing an adapter reading the instrument
+        # back cannot work out for itself, and there are two emission paths that would
+        # each have to remember.
+        turn = getattr(source, '__mccode_frame_rotation__', None)
+        rotation = None if turn is None else turn()
+        if rotation is not None and any(abs(a) > 0 for a in rotation):
+            extra = dict(extra or {}) | {'mccode_frame_rotation': list(rotation)}
+        shift = getattr(source, '__mccode_offset__', None)
+        displacement = None if shift is None else [
+            float(v) for v in shift().to(unit='m').value
+        ]
+        if displacement is not None and any(abs(v) > 0 for v in displacement):
+            extra = dict(extra or {}) | {'mccode_frame_offset': displacement}
 
     if source_type is None or source_name is None:
         raise ValueError('Both source_type and source_name must be defined')

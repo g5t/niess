@@ -49,12 +49,12 @@ def one_chopper(**overrides):
 
 
 def multi_slit(edges=EDGES):
-    from niess.components import MultiSlitChopper
+    from niess.components import DiscChopper
     assembler = Assembler('disc', flavor=Flavor.MCSTAS)
     source_at(assembler)
     from scipp import vector
     from scipp.spatial import rotations_from_rotvecs
-    MultiSlitChopper.from_calibration({
+    DiscChopper.from_calibration({
         'name': 'pack',
         'position': vector([0, 0, 6.0], unit='m'),
         'orientation': rotations_from_rotvecs(vector([0, 0, 0.0], unit='deg')),
@@ -436,7 +436,7 @@ def test_an_opening_is_measured_from_the_beam_against_the_turn(caplog):
 def test_the_windows_open_when_the_emitted_diskchoppers_open(caplog):
     """The two descriptions of one disc have to agree, whichever way it turns.
 
-    ``MultiSlitChopper`` emits a GROUP of ``DiskChopper`` instances, each with a delay
+    ``DiscChopper`` emits a GROUP of ``DiskChopper`` instances, each with a delay
     worked out from how far the disc must turn to bring that opening round. chopcalc
     describes the same disc to chopper-lib as angles instead. If they disagree, the band
     is narrowed to something the instrument does not actually pass.
@@ -455,7 +455,7 @@ def test_the_windows_open_when_the_emitted_diskchoppers_open(caplog):
                 """Opening centres and half-widths, modulo one turn."""
                 return sorted((((a + b) / 2) % period, (b - a) / 2) for a, b in intervals)
 
-            # what McStas sees: each opening's own delay, as MultiSlitChopper computes it
+            # what McStas sees: each opening's own delay, as DiscChopper computes it
             emitted = []
             for opening, closing in zip(edges[::2], edges[1::2]):
                 turn = (beam - (opening + closing) / 2) % 360.0

@@ -2,7 +2,7 @@
 
 McStas' ``DiskChopper`` describes ``nslit`` identical, evenly spaced openings, so a disc
 with neither has to be emitted as one ``DiskChopper`` per opening -- which is what
-``DiscChopper.__mccode__`` refuses to do and points at instead. ``MultiSlitChopper``
+``DiscChopper.__mccode__`` refuses to do and points at instead. ``DiscChopper``
 does it, and tags the instances so an adapter can put the disc back together.
 """
 import pytest
@@ -11,7 +11,7 @@ from mccode_antlr.assembler import Assembler
 from scipp import array, scalar, vector
 from scipp.spatial import rotations_from_rotvecs
 
-from niess.components import MultiSlitChopper
+from niess.components import DiscChopper
 from niess.nexus import find_child, get_attribute, to_nexus_structure
 from niess.provenance import NiessProvenance
 
@@ -42,14 +42,20 @@ def calibration(**overrides):
 def assembled():
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
-    MultiSlitChopper.from_calibration(calibration()).to_mccode(
+    DiscChopper.from_calibration(calibration()).to_mccode(
         assembler, at='origin', rotate='origin')
     assembler.component('sample', 'Arm', at=((0, 0, 8), 'origin'))
     return assembler.instrument
 
 
 def instances(instrument):
-    return [c for c in instrument.components if c.name.startswith('pack_slit_')]
+    """The DiskChopper instances the disc emitted, however many that is.
+
+    A disc with several openings emits `pack_slit_N` apiece; one with a single opening
+    emits `pack` itself, which is what a disc chopper has always been.
+    """
+    return [c for c in instrument.components
+            if c.name == 'pack' or c.name.startswith('pack_slit_')]
 
 
 # -- what it emits -----------------------------------------------------------
@@ -100,7 +106,7 @@ def test_an_opening_already_at_the_beam_needs_no_variable():
     cal = calibration(windows=array(values=[80.0, 100.0], dims=['edges'], unit='deg'))
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
-    MultiSlitChopper.from_calibration(cal).to_mccode(
+    DiscChopper.from_calibration(cal).to_mccode(
         assembler, at='origin', rotate='origin')
 
     only = instances(assembler.instrument)[0]
@@ -123,7 +129,7 @@ def test_every_opening_is_in_one_group(assembled):
 
 def test_the_group_name_follows_the_disc_name():
     """Instance names are unique in an instrument, so a name-derived group is too."""
-    chopper = MultiSlitChopper.from_calibration(calibration(name='second_pack'))
+    chopper = DiscChopper.from_calibration(calibration(name='second_pack'))
     assert chopper.group_name() == 'second_pack_group'
 
 
@@ -131,7 +137,7 @@ def test_two_discs_do_not_share_a_group():
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
     for name in ('first', 'second'):
-        MultiSlitChopper.from_calibration(calibration(name=name)).to_mccode(
+        DiscChopper.from_calibration(calibration(name=name)).to_mccode(
             assembler, at='origin', rotate='origin')
 
     groups = {c.name: c.group for c in assembler.instrument.components
@@ -149,23 +155,37 @@ def test_the_disc_has_one_speed_and_one_delay(assembled):
 
 @pytest.mark.parametrize('edges,message', [
     ([0.0, 10.0, 20.0], 'even number'),
-    ([-5.0, 5.0], 'negative slit edge'),
     ([30.0, 10.0], 'strictly increase'),
     ([10.0, 10.0], 'strictly increase'),
-    ([370.0, 380.0], 'within one revolution'),
     ([10.0, 20.0, 100.0, 380.0], 'overlap themselves'),
-], ids=['odd', 'negative', 'decreasing', 'repeated', 'starts_past_360', 'overlapping'])
+], ids=['odd', 'decreasing', 'repeated', 'overlapping'])
 def test_edges_must_follow_the_convention(edges, message):
     cal = calibration(windows=array(values=edges, dims=['edges'], unit='deg'))
     with pytest.raises(ValueError, match=message):
-        MultiSlitChopper.from_calibration(cal).slits()
+        DiscChopper.from_calibration(cal).slits()
+
+
+@pytest.mark.parametrize('edges,ids', [
+    ([-5.0, 5.0], 'an opening across the mark'),
+    ([370.0, 380.0], 'an opening described a turn later'),
+])
+def test_edges_need_not_be_positive(edges, ids):
+    """The `NXdisk_chopper` convention wants positive edges; the component does not.
+
+    An opening centred on a beam at `beam_angle = 0` straddles the mark, and `[-85, 85]`
+    says that more plainly than `[275, 445]`. Nothing downstream cares -- a disc reaches
+    the same place every turn -- and the NeXus writer shifts them into `[0, 360)`, where
+    the convention is what applies.
+    """
+    cal = calibration(windows=array(values=edges, dims=['edges'], unit='deg'))
+    assert DiscChopper.from_calibration(cal).slits() == [(edges[0], edges[1])]
 
 
 def test_openings_may_just_touch():
     """A last edge exactly 360 beyond the first closes where the first opens."""
     cal = calibration(windows=array(values=[10.0, 30.0, 350.0, 370.0],
                                     dims=['edges'], unit='deg'))
-    assert MultiSlitChopper.from_calibration(cal).slits() == [
+    assert DiscChopper.from_calibration(cal).slits() == [
         (10.0, 30.0), (350.0, 370.0),
     ]
 
@@ -186,7 +206,7 @@ def test_the_beam_crossing_moves_the_whole_disc(assembled):
                       beam_angle=scalar(180.0, unit='deg'))
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
-    MultiSlitChopper.from_calibration(cal).to_mccode(
+    DiscChopper.from_calibration(cal).to_mccode(
         assembler, at='origin', rotate='origin')
 
     for instance in instances(assembler.instrument):
@@ -200,7 +220,7 @@ def test_a_calibration_that_still_gives_an_offset_is_refused():
     """A disc is placed by where the beam crosses it, and only by that."""
     cal = calibration(offset=vector([0, -0.32, 0], unit='m'))
     with pytest.raises(ValueError, match='placed by where the beam crosses it'):
-        MultiSlitChopper.from_calibration(cal)
+        DiscChopper.from_calibration(cal)
 
 
 def test_the_offset_can_be_left_to_the_angles():
@@ -213,7 +233,7 @@ def test_the_offset_can_be_left_to_the_angles():
     from math import cos, radians, sin
     cal = calibration(beam_angle=scalar(180.0, unit='deg'))   # zero_angle stays at 15
     cal.pop('offset', None)
-    disc = MultiSlitChopper.from_calibration(cal)
+    disc = DiscChopper.from_calibration(cal)
 
     turn = radians(15.0 + 180.0)
     assert disc.beam_offset().to(unit='m').value == pytest.approx(
@@ -244,7 +264,7 @@ def test_exactly_one_instance_is_the_primary(assembled):
 def test_tagging_can_be_declined(assembled):
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
-    MultiSlitChopper.from_calibration(calibration()).to_mccode(
+    DiscChopper.from_calibration(calibration()).to_mccode(
         assembler, at='origin', rotate='origin', insert_provenance_metadata=False)
 
     assert all(NiessProvenance.from_instance(c) is None
@@ -308,7 +328,7 @@ def test_rebuilding_follows_the_tags_not_the_instance_order(assembled):
 
 
 def test_without_the_translator_the_mccode_view_survives(assembled):
-    """A registry that does not know MultiSlitChopper still converts the instrument.
+    """A registry that does not know DiscChopper still converts the instrument.
 
     It sees what the McStas file literally describes: three separate discs. Grouping is
     an enrichment, not a prerequisite.
@@ -336,7 +356,7 @@ def test_a_renamed_group_is_still_a_valid_placement_target():
     """
     assembler = Assembler('chopped', flavor=Flavor.MCSTAS)
     assembler.component('origin', 'Arm', at=((0, 0, 0), 'ABSOLUTE'))
-    MultiSlitChopper.from_calibration(calibration()).to_mccode(
+    DiscChopper.from_calibration(calibration()).to_mccode(
         assembler, at='origin', rotate='origin')
     assembler.component('sample', 'Arm', at=((0, 0, 3), 'pack_slit_0'))
 

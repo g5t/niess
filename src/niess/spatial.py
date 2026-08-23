@@ -248,6 +248,25 @@ def mccode_ordered_angles(orientation: Variable):
     return float(angles[0]), float(angles[1]), float(angles[2])
 
 
+def mccode_angles_without_turn(angles, rotvec_degrees):
+    """McCode angles with a frame turn taken back out.
+
+    A component may be emitted turned relative to the object it describes, where the
+    McCode component's own conventions demand it -- see ``__mccode_frame_rotation__``.
+    Given the emitted ``(x, y, z)`` and the turn as a rotation vector in degrees, this is
+    the triple describing the object itself: the emitted rotation is ``physical * turn``,
+    so the physical one is ``emitted * turn`` inverted.
+    """
+    from scipy.spatial.transform import Rotation
+    emitted = Rotation.from_euler('xyz', [float(a) for a in angles], degrees=True)
+    turn = Rotation.from_rotvec([float(a) for a in rotvec_degrees], degrees=True)
+    undone = (emitted * turn.inv()).as_euler('xyz', degrees=True)
+    # Composing and decomposing rotations leaves a residue of order 1e-16 degrees on the
+    # axes that should have come out at zero. Nobody means a rotation that small, and left
+    # in it becomes a transformation in the emitted file that says "turn by nothing".
+    return tuple(0.0 if abs(float(a)) < 1e-12 else float(a) for a in undone)
+
+
 def mccode_quaternion(x, y, z):
     from scipp import vector
     from scipp.spatial import rotations_from_rotvecs as r

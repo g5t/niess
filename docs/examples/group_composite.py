@@ -1,6 +1,6 @@
 """One niess object, several McStas components, one NeXus group.
 
-`MultiSlitChopper` is the worked case: a disc whose openings are neither identical nor
+`DiscChopper` with several openings is the worked case: a disc whose openings are neither identical nor
 evenly spaced cannot be a single McStas `DiskChopper`, so it becomes one per opening --
 and the metadata each one carries is what lets an adapter put the disc back together.
 """
@@ -13,9 +13,9 @@ def main(outdir: Path) -> None:
     from mccode_antlr.assembler import Assembler
     from scipp import array, scalar, vector
     from scipp.spatial import rotations_from_rotvecs
-    from niess.components import MultiSlitChopper
+    from niess.components import DiscChopper
 
-    disc = MultiSlitChopper.from_calibration({
+    disc = DiscChopper.from_calibration({
         'name': 'pack',
         'position': vector([0, 0, 5.0], unit='m'),
         'orientation': rotations_from_rotvecs(vector([0, 0, 0.0], unit='deg')),
