@@ -389,3 +389,63 @@ def test_a_delay_in_milliseconds_is_converted_to_seconds():
 def test_a_value_in_the_wrong_unit_is_refused_by_name():
     with pytest.raises(ValueError, match="chopperspeed is declared in 'Hz'"):
         teaching_setup(values={'chopperspeed': sc.scalar(1.0, unit='m')})
+
+
+# -- a beam that branches ---------------------------------------------------------
+
+def branching_instrument():
+    """The beam splits at the sample; declaration order would chain the two detectors."""
+    assembler = Assembler('branch', flavor=Flavor.MCSTAS)
+    assembler.parameter('source_lambda_min/"angstrom"=0.75')
+    assembler.parameter('source_lambda_max/"angstrom"=10.0')
+    assembler.component('source', 'ESS_butterfly', at=((0, 0, 0), 'ABSOLUTE'),
+                        parameters={'Lmin': 'source_lambda_min',
+                                    'Lmax': 'source_lambda_max'})
+    disc(14.0).to_mccode(assembler, at='source', rotate='source')
+    assembler.component('sample', 'Arm', at=((0, 0, 10.0), 'source'))
+    assembler.component('east', 'TOF_monitor', at=((3.0, 0, 0), 'sample'))
+    assembler.component('west', 'TOF_monitor', at=((-3.0, 0, 0), 'sample'))
+
+    from networkx import DiGraph
+    flow = DiGraph()
+    flow.add_edges_from([('source', 'pack_slit_0'), ('pack_slit_0', 'pack_slit_1'),
+                         ('pack_slit_1', 'pack_slit_2'), ('pack_slit_2', 'sample'),
+                         ('sample', 'east'), ('sample', 'west')])
+    return assembler, flow
+
+
+def placed_detectors(setup):
+    return {name: setup.model.detectors[name].distance.value for name in setup.detectors}
+
+
+def test_distances_follow_the_declared_order_without_a_graph():
+    """Which chains the two detectors, so the second is measured through the first.
+
+    `west` comes out 6 m further than `east` -- back to the sample and out the other side
+    -- when they are the same distance from it.
+    """
+    assembler, _ = branching_instrument()
+    placed = placed_detectors(to_tof_model(assembler, source=offline_source()))
+    assert placed['west'] - placed['east'] == pytest.approx(6.0, abs=1e-9)
+
+
+def test_a_given_graph_measures_each_branch_from_where_it_leaves():
+    """Both detectors are 3 m off the same sample, so both are the same distance away."""
+    assembler, flow = branching_instrument()
+    placed = placed_detectors(
+        to_tof_model(assembler, source=offline_source(), graph=flow))
+    assert placed['west'] == pytest.approx(placed['east'], abs=1e-9)
+
+
+def test_the_graph_reaches_the_chopper_train_too():
+    """`build_train` walks the same flow, so a chopper's path has to come from it.
+
+    This one is upstream of the branch, so the two graphs agree about it -- which is the
+    point: handing in a graph must not disturb what was already right.
+    """
+    assembler, flow = branching_instrument()
+    without = to_tof_model(assembler, source=offline_source())
+    given = to_tof_model(assembler, source=offline_source(), graph=flow)
+    assert len(given.choppers) == 1
+    assert given.choppers[0].distance == pytest.approx(without.choppers[0].distance,
+                                                       abs=1e-12)

@@ -318,11 +318,17 @@ def _check_group(group) -> None:
 
 
 def build_train(instrument, *, source=None, skip=(), path_lengths=None,
-                latest_emission=None):
-    """Everything the calculation needs, read off the assembled instrument."""
+                latest_emission=None, graph=None):
+    """Everything the calculation needs, read off the assembled instrument.
+
+    ``graph`` is the particle flow, used to find the source and to walk each chopper's
+    path to it. McCode has no way to say that a beam branches, so an instrument whose
+    flow is not the order its components are declared in -- BIFROST after the sample,
+    where one beam becomes many -- has to be handed the real one.
+    """
     from .model import ChopperTrain
 
-    graph = instrument.build_flow_graph()
+    graph = instrument.build_flow_graph() if graph is None else graph
     places = positions(instrument)
     overrides = dict(path_lengths or {})
     skip = set(skip)

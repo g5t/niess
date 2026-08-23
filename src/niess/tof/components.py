@@ -203,7 +203,7 @@ def _furthest_measurable(graph, places, source_name, instrument, given: str | No
 def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
                  pulses: int | None = None, seed: int | None = None,
                  sample: str | None = None, source_name: str | None = None,
-                 skip=(), path_lengths=None, registry=None) -> TofSetup:
+                 skip=(), path_lengths=None, graph=None, registry=None) -> TofSetup:
     """Build a ready-to-run ``tof.Model`` from an assembled instrument.
 
     Parameters
@@ -220,6 +220,12 @@ def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
     sample:
         The component to put a detector on at the end of the beam. Found from the beam
         path when omitted.
+    graph:
+        The particle flow through the instrument, as a ``networkx`` DiGraph. Every
+        distance here is walked along it, and McCode has no way to say that a beam
+        branches -- so an instrument whose flow is not the order its components are
+        declared in, BIFROST after the sample among them, has to be handed the real one.
+        Built from the instrument when omitted.
     """
     from ..chopcalc.discovery import build_train
 
@@ -235,7 +241,7 @@ def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
         )
 
     parameters = ParameterValues(instrument, values)
-    graph = instrument.build_flow_graph()
+    graph = instrument.build_flow_graph() if graph is None else graph
     places = positions(instrument)
     source_instance = find_source(instrument, graph, source_name)
 
@@ -252,7 +258,7 @@ def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
     specs: dict[str, ChopperSpec] = {}
     try:
         train = build_train(instrument, source=source_name, skip=skip,
-                            path_lengths=path_lengths)
+                            path_lengths=path_lengths, graph=graph)
     except ChopcalcError as error:
         notes.append(f'no chopper train: {error}')
     else:
@@ -318,7 +324,7 @@ def to_tof_model(obj, *, source=None, values=None, neutrons: int = 1_000_000,
         return to_tof_model(obj, source=None, values=merged, neutrons=neutrons,
                             pulses=pulses, seed=seed, sample=sample,
                             source_name=source_name, skip=skip,
-                            path_lengths=path_lengths, registry=registry)
+                            path_lengths=path_lengths, graph=graph, registry=registry)
 
     return TofSetup(
         model=model, source=source,

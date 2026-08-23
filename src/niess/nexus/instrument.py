@@ -520,6 +520,9 @@ def translate_instance(context: NexusContext, instance, index: int) -> tuple[dic
     for direction, names in (('inputs', context.inputs(instance.name)),
                              ('outputs', context.outputs(instance.name))):
         if names:
+            # nexusformat's attribute inserter automatically converts 
+            # a singular list[str] to its held str. It might be nice to always
+            # insert the list[str] here, but then we 'break' with the standard
             add_attribute(node, direction, names[0] if len(names) == 1 else names)
 
     return node, suppressed
@@ -548,6 +551,7 @@ def to_nexus_structure(
         nxlog_root: str | None = None,
         absolute_depends_on: bool = False,
         registry=None,
+        graph=None,
 ) -> dict:
     """Convert an assembled instrument into ESS NeXus Structure JSON.
 
@@ -567,12 +571,17 @@ def to_nexus_structure(
         only the generic per-component-type translators. Pass an instrument-specific
         registry -- ``niess.nexus.bifrost.BIFROST_REGISTRY``, say -- to add its
         translators to this conversion alone.
+    graph:
+        A networkx DiGraph representing the possible particle path(s) through the
+        instrument. A standard linear path will be constructed for @inputs and @outputs
+        group attributes if this is not provided.
     """
     context = NexusContext(
         instr,
         nxlog_root=nxlog_root or DEFAULT_NXLOG_ROOT,
         origin_name=origin,
         registry=registry,
+        graph=graph,
     )
     instrument = group('instrument', 'NXinstrument', children=instrument_children(context))
     entry = group('entry', 'NXentry', children=[instrument])
