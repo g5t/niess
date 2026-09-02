@@ -6,8 +6,8 @@ lines and simulates neither absorption nor scattering — it will never replace 
 it answers "what does my chopper train let through?" in a second rather than a coffee
 break.
 
-`niess.tof` builds a ready-to-run `tof.Model` from an instrument you have already
-assembled, so the train does not have to be retyped.
+`niess.tof` builds a ready-to-run `tof.Model` from a niess instrument, so the train does
+not have to be retyped.
 
 ```sh
 pip install 'niess[tof]'
@@ -15,7 +15,9 @@ pip install 'niess[tof]'
 
 ## Build a model
 
+```python
 --8<-- "tof_model.py:build"
+```
 
 ```
 TofSetup: 1 chopper(s), 2 detector(s)
@@ -44,7 +46,9 @@ The knobs are listed anyway, because knowing which ones exist is the point of as
 the report names *what read each one* — so a value that looks wrong can be traced to the
 component that used it. Turn one with:
 
+```python
 --8<-- "tof_model.py:override"
+```
 
 `with_values` rebuilds from the same instrument, so the report then marks `chopperspeed` as
 given rather than defaulted.
@@ -73,12 +77,14 @@ two runs differ by what was changed rather than by which neutrons were drawn. Om
 
 ## Where the numbers come from
 
-The same place `niess.chopcalc` gets them: the emitted instrument, read through niess
-provenance. chopcalc extracts a chopper train to narrow a source's wavelength band, and
-emits parameter *names* so the band recomputes at run time. `tof` configures one specific
-machine, so `niess.tof` reuses that extraction and evaluates it — which means the disc
-grouping, the beam-path walk and the opening-angle conventions are shared with chopcalc
-rather than written a second time.
+Off the discs themselves. A `DiscChopper` carries its speed, its delay and its window
+edges as scipp quantities, so there is nothing to recover: `niess.tof` reads them and
+converts. The beam-path walk it measures distances along is shared with `niess.chopcalc`
+— both use `niess.chopcalc.paths` — so a chopper's distance is the same number in the
+band calculation and in the diagram.
+
+An instrument niess did *not* build has none of that, only emitted components, and
+modelling one is no longer supported: niess models niess instruments.
 
 The one thing that is not shared is the conversion into `tof`'s own description, because
 the two disagree about how a chopper is specified:

@@ -5,7 +5,6 @@ from niess.components import RadialFilterCollimator
 
 
 class Channel(Base):
-    from networkx import DiGraph
     from mccode_antlr.assembler import Assembler
     from mccode_antlr.instr import Instance
     from scipp import Variable
@@ -13,6 +12,30 @@ class Channel(Base):
 
     radial_filter_collimator: RadialFilterCollimator
     pairs: tuple[Arm, Arm, Arm, Arm, Arm]
+
+    def __niess_label__(self, label: str) -> str:
+        """A channel names everything inside it: ``channel_3_radial_filter_collimator``,
+        ``channel_3_1_monochromator``. This replaces the in-place mutation of the
+        filter's own name that emission used to do.
+        """
+        from ..tree import label_index
+        index = label_index(label)
+        if index is None:
+            raise ValueError(
+                f'a Channel is identified by its position; got the label {label!r}'
+            )
+        return f'channel_{index + 1}'
+
+    @property
+    def cassette_angle(self) -> Variable:
+        """How far this channel is turned about the sample, from the tank centreline.
+
+        Every arm in a channel shares it -- ``rtp_parameters`` raises if they disagree --
+        so it belongs to the channel rather than to any one arm. Computed inside
+        to_mccode until now, where only the McStas conversion could reach it.
+        """
+        from scipp import vector
+        return self.sample_space_angle(vector([0, 0, 0], unit='m')).to(unit='degree')
 
     @classmethod
     def from_dict(cls, data):
@@ -113,6 +136,10 @@ class Channel(Base):
         def idx_or(obj, index):
             return obj['analyzer', index] if 'analyzer' in obj.dims else obj
 
+        # Captured before the loop: the loop rebinds `params` to the per-arm dict it
+        # builds, so reading the calibration inside it would read the previous arm's.
+        stream = params.get('stream')
+
         pairs = []
         for idx, (ap, tv, dl, ct, cs, cc, gp) in enumerate(zip(
                 analyzer_position, tau_vecs, vp['detector_length'], vp['blade_count'], vp['crystal_shape'], coverages,
@@ -128,7 +155,10 @@ class Channel(Base):
                 detector_orient=idx_or(detector_orient, idx),
                 resistance=idx_or(resistance, idx),
                 resistivity=idx_or(resistivity, idx),
-                gap=gp
+                gap=gp,
+                # this dict is an allow-list -- anything the calibration says that is
+                # not named here stops at this channel and never reaches the detector
+                stream=stream,
             )
             pairs.append(Arm.from_calibration(ap, tv, detector_position['analyzer', idx], dl, **params))
 
@@ -176,23 +206,64 @@ class Channel(Base):
 
         return sa, ad, x7, y7, a7, x9, y9, a9, ra0
 
-    def to_mccode(self, assembler: Assembler, relative: Instance, name: str, when: str = None, settings: dict = None, flat: bool=True, **kwargs):
-        from scipp import concat, all, isclose, vector
-        from niess.mccode import add_niess_metadata
+    def __niess_children__(self):
+        """The cassette frame, the filter, then the five arms.
+
+        The frame is declared rather than emitted: it is where everything in the channel
+        is measured from, which is a fact about the channel and not about McStas.
+        """
+        from ..components.frame import Frame
+        from scipp import vector
+        cassette = Frame(name='arm',
+                         rotation=vector([0., 1., 0.]) * self.cassette_angle,
+                         extra={'frame': 'cassette'}, owner_key='channel')
+        return (('cassette', cassette),
+                ('radial_filter_collimator', self.radial_filter_collimator),
+                *((f'pairs[{i}]', arm) for i, arm in enumerate(self.pairs)))
+
+    def __niess_child_frame__(self, visit, label, default):
+        """Everything in the channel sits in its cassette frame; the frame itself does not."""
+        return default if label == 'cassette' else f'{visit.id}/cassette'
+
+    def __mccode_enter__(self, visit):
+        """The per-particle state the channel's contents are gated on.
+
+        Which channel a neutron was tagged with by the radial slits is a fact about one
+        Monte Carlo history, so it lives here and nowhere else.
+        """
+        context = visit.context
+        when = f'{1 + visit.index} == secondary_cassette'
+        for declaration in ('int secondary_scattered;', 'int analyzer;', 'int flag;'):
+            context.assembler.ensure_user_var(declaration)
+        context.whens[f'{visit.id}/cassette'] = when
+        context.whens[f'{visit.id}/radial_filter_collimator'] = when
+        return None
+
+    def to_mccode(self, assembler: Assembler, relative: Instance, name: str,
+                  when: str = None, settings: dict = None, flat: bool = True,
+                  insert_provenance_metadata: bool = True, **kwargs):
+        from niess.provenance import add_niess_metadata
         # For each channel we need to define the local coordinate system, relative to the provided sample
-        origin = vector([0, 0, 0], unit='m')
-        ra0 = self.sample_space_angle(origin).to(unit='degree').value
+        ra0 = self.cassette_angle.value
         cassette = assembler.component(f"{name}_arm", "Arm", at=((0, 0, 0), relative), rotate=((0, ra0, 0), relative))
-        add_niess_metadata(cassette, self, source_name=f'{name}_arm', role='reference-frame',
+        if insert_provenance_metadata:
+            add_niess_metadata(cassette, self, source_name=f'{name}_arm', role='reference-frame',
                            extra={'frame': 'cassette', 'channel': name})
         cassette.WHEN(when)
 
         for uv in ('int secondary_scattered;', 'int analyzer;', 'int flag;'):
             assembler.ensure_user_var(uv)
 
-        # The filter name does not, thus far, include the channel name:
-        self.radial_filter_collimator.name = f'{name}_radial_filter_collimator'
-        rfc = self.radial_filter_collimator.to_mccode(assembler, cassette, cassette)
+        # The filter is calibrated as 'radial_filter_collimator' and emitted as
+        # 'channel_3_radial_filter_collimator', because instance names have to be unique
+        # across an instrument. Emit a renamed copy rather than renaming the filter:
+        # assigning to it left the tree holding the emitted name afterwards, so a tank
+        # that had been built once no longer serialised to what it was calibrated with,
+        # and anything deriving the name from the tree got it twice over.
+        from msgspec.structs import replace
+        filtered = replace(self.radial_filter_collimator,
+                           name=f'{name}_radial_filter_collimator')
+        rfc = filtered.to_mccode(assembler, cassette, cassette)
         rfc.WHEN(when)
 
         for arm_index, arm in enumerate(self.pairs):
@@ -211,13 +282,6 @@ class Channel(Base):
                 with assembler.included(f"{assembler.name}_{arm_name}") as child:
                     arm.to_mccode(child, cassette, **to_mc, **kwargs)
 
-    def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
-        radial_collimator_filter = f'{name}_radial_filter_collimator'
-        if upstream is not None:
-            graph.add_edge(upstream, radial_collimator_filter)
-        cassette = f'{name}_arm'
-        graph.add_edge(radial_collimator_filter, cassette)
-        return [arm.add_to_graph(cassette, f"{name}_{1 + arm_index}", graph) for arm_index, arm in enumerate(self.pairs)]
 
     def efu_calibration(self, channel_number: int):
         """The EFU calibration needs a unique 'group' number for each triplet

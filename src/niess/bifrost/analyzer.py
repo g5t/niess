@@ -7,6 +7,13 @@ class Analyzer(Base):
 
     blades: tuple[Crystal, ...]  # 7-9 blades
 
+    def __niess_flow__(self, graph, path):
+        """One node. Seven to nine blades, but a neutron meets one analyzer and McStas emits one
+        Monochromator_Rowland. The blades stay walkable; flow does not run through them.
+        """
+        from ..tree import leaf_flow
+        return leaf_flow(self, graph, path)
+
     @classmethod
     def from_dict(cls, data):
         from ..components import Crystal
@@ -114,9 +121,41 @@ class Analyzer(Base):
         )
         return params
 
+    def __mccode_enter__(self, visit):
+        """One Monochromator_Rowland, however many blades.
+
+        SKIP because the blades are this component's own business: McStas takes them as
+        a count and a shape, not as seven components. They stay in the tree, so a target
+        that wants their real positions can walk them.
+        """
+        from scipp import vector
+        from niess.walk import SKIP
+        from .arm import Arm
+
+        context = visit.context
+        arm = visit.ancestor(Arm)
+        name = arm.emit_name('monochromator')
+        self.to_mccode(
+            context.assembler,
+            source=context.reference(arm.frame),   # what the arm itself sits in
+            relative=context.reference(visit.frame),
+            sink=arm.emit_name('triplet'),
+            theta=arm.obj.analyzer_theta.value,
+            name=name,
+            when=context.whens.get(visit.id),
+            extend=(f'secondary_scattered = (SCATTERED) ? 1 : 0;\n'
+                    f'analyzer = (SCATTERED) ? {1 + arm.index} : 0;'),
+            origin=vector([0, 0, 0], unit='m'),
+            insert_provenance_metadata=context.provenance,
+        )
+        context.emitted[visit.id] = name
+        return SKIP
+
     def to_mccode(self, assembler: Assembler, source: str, relative: str, sink: str, theta: float, name: str,
-                  when: str = None, extend: str = None, origin: Variable = None):
-        from niess.mccode import add_niess_metadata, ensure_registry
+                  when: str = None, extend: str = None, origin: Variable = None,
+            insert_provenance_metadata: bool = True):
+        from niess.assembler import ensure_registry
+        from niess.provenance import add_niess_metadata
         ensure_registry(assembler, "mcdotstar/mcstas-monochromator-rowland@main")
 
         mono = assembler.component(name, 'Monochromator_Rowland',
@@ -124,5 +163,7 @@ class Analyzer(Base):
         mono.set_parameters(**self.mcstas_parameters(origin, source, sink))
         mono.WHEN(when)
         mono.EXTEND(extend)
-        add_niess_metadata(mono, self, source_name=name, role='physical-component')
+        if insert_provenance_metadata:
+            add_niess_metadata(mono, self, source_name=name,
+                               role='physical-component')
 

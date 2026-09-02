@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import Optional, Union
 from mccode_antlr.assembler import Assembler
 from mccode_antlr.instr import Instance
-from networkx import DiGraph
 from scipp import Variable
 from .component import Base, Component
 
@@ -47,6 +46,14 @@ class Guide(Component):
 class StraightGuide(Guide):
     width: Variable
     height: Variable
+    substrate: Optional[Variable] = None
+    """How thick the mirror substrate is, for anything drawing this guide as a solid.
+
+    A guide's McCode parameters describe the *channel* -- the space a neutron flies down
+    -- and say nothing about the glass around it, so a CAD export has to be told. Unset
+    means `niess.brep.builders.SUBSTRATE`, which is what every guide was drawn with
+    before this was sayable, so leaving it alone draws what it always drew.
+    """
 
     @classmethod
     def from_calibration(cls, cal: dict):
@@ -101,13 +108,6 @@ class SegmentedGuide(Base):
     name: str
     segments: list
 
-    def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
-        last = upstream
-        for x in self.segments:
-            names = x.add_to_graph(last, x.name, graph)
-            if len(names) == 1:
-                last = names[0]
-        return [last]
 
 class StraightGuides(SegmentedGuide):
     segments: list[StraightGuide]
@@ -144,6 +144,14 @@ class TaperedGuide(Guide):
     in_height: Variable
     out_width: Variable
     out_height: Variable
+    substrate: Optional[Variable] = None
+    """How thick the mirror substrate is, for anything drawing this guide as a solid.
+
+    A guide's McCode parameters describe the *channel* -- the space a neutron flies down
+    -- and say nothing about the glass around it, so a CAD export has to be told. Unset
+    means `niess.brep.builders.SUBSTRATE`, which is what every guide was drawn with
+    before this was sayable, so leaving it alone draws what it always drew.
+    """
 
     @classmethod
     def from_calibration(cls, cal: dict):
@@ -269,6 +277,30 @@ class PartialEllipse(Base):
 class EllipticGuide(Guide):
     horizontal: PartialEllipse
     vertical:  PartialEllipse
+    substrate: Optional[Variable] = None
+    """How thick the mirror substrate is, for anything drawing this guide as a solid.
+
+    A guide's McCode parameters describe the *channel* -- the space a neutron flies down
+    -- and say nothing about the glass around it, so a CAD export has to be told. Unset
+    means `niess.brep.builders.SUBSTRATE`, which is what every guide was drawn with
+    before this was sayable, so leaving it alone draws what it always drew.
+    """
+    resolution: Optional[float] = None
+    """How finely to approximate the elliptic surface, in metres per segment.
+
+    A drawing choice rather than a property of the guide: the ellipse is exact and a
+    solid model is not, so something has to say how many segments to spend on it. Unset
+    means `niess.brep.builders.RESOLUTION`.
+    """
+
+    def __niess_children__(self):
+        """None: `horizontal` and `vertical` describe this guide's cross-section.
+
+        PartialEllipse is a Base, so the default rule would report them as two child
+        components -- and a BIFROST primary would walk 187 leaves where it emits 158
+        components. They are the shape of this guide, not things inside it.
+        """
+        return ()
 
     @classmethod
     def from_calibration(cls, cal: dict):

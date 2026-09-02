@@ -4,7 +4,6 @@ import msgspec
 from msgspec.structs import fields
 from functools import lru_cache
 from scipp import Variable
-from networkx import DiGraph
 from mccode_antlr.assembler import Assembler
 from mccode_antlr.instr import Instance
 
@@ -61,11 +60,53 @@ class Base(msgspec.Struct):
                     return False
         return True
 
-    def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
-        graph.add_node(name)
-        if upstream is not None:
-            graph.add_edge(upstream, name)
-        return [name]
+    def __niess_children__(self):
+        """This object's child components, in declaration order.
+
+        See :mod:`niess.tree`. Overriding is a last resort: the default describes every
+        composite in the codebase except one.
+        """
+        from ..tree import default_children
+        return default_children(self)
+
+    def __repr__(self) -> str:
+        """What this is and what it contains, not every field of every descendant.
+
+        See :mod:`niess.display`. The generated repr is the whole subtree -- a BIFROST
+        tank is a quarter of a million characters of nested scipp variables.
+        """
+        from ..display import node_header, text_tree
+        return text_tree(self, header=node_header(self))
+
+    def _repr_html_(self) -> str:
+        """The same tree in a notebook, collapsed, one `<details>` per node."""
+        from html import escape
+        from ..display import html_tree, node_header
+        return html_tree(self, header=f'<b>{escape(node_header(self))}</b>')
+
+    def __niess_label__(self, label: str) -> str | None:
+        """What this object contributes to the names of things emitted inside it.
+
+        ``None`` means transparent: a section adds nothing, so a guide declared inside
+        three nested sections is still emitted as ``unit_29_straight``. Overridden where
+        a composite does name its contents -- a BIFROST channel prefixes them
+        ``channel_3`` -- and by Component, which contributes the name it was calibrated
+        with.
+
+        ``label`` is this node's own path label, so a composite in a sequence can use
+        its index.
+        """
+        return None
+
+    def __niess_flow__(self, graph, path):
+        """How particle flow passes through this object. See :mod:`niess.tree`."""
+        from ..tree import chain_flow
+        return chain_flow(self, graph, path)
+
+    def to_graph(self):
+        """The particle flow through this object, as a networkx DiGraph."""
+        from ..tree import flow_graph
+        return flow_graph(self)
 
 
 class Component(Base, kw_only=True):
@@ -107,6 +148,10 @@ class Component(Base, kw_only=True):
     @classmethod
     def from_dict(cls, dictionary):
         return cls.from_calibration(dictionary)
+
+    def __niess_label__(self, label: str) -> str:
+        """A component is named, and that name is what gets emitted."""
+        return self.name
 
     def __mccode__(self) -> tuple[str, dict]:
         """Return the component type name and parameters needed to produce a McCode instance"""
@@ -168,7 +213,8 @@ class Component(Base, kw_only=True):
     ):
         from mccode_antlr.common.parameters import InstrumentParameter as InstPar
         from ..spatial import mccode_ordered_angles
-        from ..mccode import add_niess_metadata, ensure_runtime_parameter
+        from ..assembler import ensure_runtime_parameter
+        from ..provenance import add_niess_metadata
 
         comp, pars = self.__mccode__()
 
@@ -178,6 +224,10 @@ class Component(Base, kw_only=True):
                 pars[name] = str(value)
 
         at_rel = 'ABSOLUTE' if at is None else at
+        # `rotate` is normally the reference to turn relative to, this component
+        # supplying the angles. A caller that knows better -- a collapsed mounting
+        # frame -- hands over both.
+        given = rotate if isinstance(rotate, tuple) and len(rotate) == 2 else None
         rot_rel = 'ABSOLUTE' if rotate is None else rotate
 
         # `+` rather than `+=`: scipp adds in place, and `self.position` is the very
@@ -185,7 +235,7 @@ class Component(Base, kw_only=True):
         # component and the calibration it came from -- accumulating another offset
         # on every subsequent build from the same data.
         at = ((self.position + self.__mccode_offset__()).to(unit='m').value, at_rel)
-        rot = (mccode_ordered_angles(self.__mccode_orientation__()), rot_rel)
+        rot = given or (mccode_ordered_angles(self.__mccode_orientation__()), rot_rel)
 
         instance = assembler.component(self.name, comp, at=at, rotate=rot, parameters=pars)
         if insert_provenance_metadata:

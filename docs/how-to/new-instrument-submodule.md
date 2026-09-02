@@ -228,54 +228,107 @@ pack_slit_0_delay = packdelay + (packspeed < 0 ? 290.0 : 70.0) / (360.0 * fabs(p
 An opening already at the beam skips the variable: it is there at `packdelay` whichever
 way the disc spins.
 
-### Making the group recoverable
+### One disc, three components, one group
 
-Splitting the disc is a McStas implementation detail. A NeXus file wants one
-`NXdisk_chopper` and a CAD model wants one solid, so each instance is tagged with what
-an adapter needs to reverse the split:
+Splitting the disc is a McStas implementation detail:
+
+```python
+--8<-- "group_composite.py:mccode"
+```
+
+Converting the tree, nothing has to reverse it, because nothing did it. A NeXus file
+gets one `NXdisk_chopper` with all three openings, straight off the disc:
+
+```python
+--8<-- "group_composite.py:nexus"
+```
+
+### ...and for whoever reads the emitted file
+
+The McStas instrument is still three components, and someone reading *it* -- an adapter
+working on an assembled instrument, or a file niess did not build -- has to put the disc
+back together. So each instance is tagged with what that takes:
 
 ```python
 --8<-- "group_composite.py:tags"
 ```
 
 ```
-pack_slit_0    role=nexus-group-primary    group=pack index=0 edges=[10.0, 30.0]
-pack_slit_1    role=nexus-group-member     group=pack index=1 edges=[100.0, 140.0]
-pack_slit_2    role=nexus-group-member     group=pack index=2 edges=[350.0, 370.0]
+pack_slit_0    role=disc-opening-primary    group=pack index=0 edges=[10.0, 30.0]
+pack_slit_1    role=disc-opening-member     group=pack index=1 edges=[100.0, 140.0]
+pack_slit_2    role=disc-opening-member     group=pack index=2 edges=[350.0, 370.0]
 ```
 
 | what | why |
 | --- | --- |
-| `nexus_group_id` | which instances belong to the same physical object |
-| `nexus_group_index` | their order within it |
+| `disc_group_id` | which instances belong to the same physical object |
+| `disc_group_index` | their order within it |
 | `slit_edges` | this instance's own contribution to the whole |
 | `role` | which instance stands for the group, and which are folded into it |
 
 Tag by explicit role rather than by position: an adapter reads the instrument as a flat
 list, and nothing guarantees the primary comes first.
 
-`niess.nexus` ships the matching translator, registered against the component's *niess
-source type* — the first dispatch tier — so no configuration is needed. The primary
-instance rebuilds the disc from its siblings; the members return `None`, which means
-emit nothing. The rebuilt group takes the disc's own name, since `pack_slit_0` describes
-how the instrument was built rather than what it contains:
-
-```python
---8<-- "group_composite.py:result"
-```
+`niess.nexus` ships the matching translator,
+registered against the component's *niess source type*. The primary instance rebuilds
+the disc from its siblings; the members return `None`, which means emit nothing. The
+rebuilt group takes the disc's own name, since `pack_slit_0` describes how the
+instrument was built rather than what it contains.
 
 Without that translator the same instrument still converts, as the three separate discs
-the McStas file literally describes. Grouping is an enrichment, not a prerequisite.
-
-`niess.brep` dispatches through the same three tiers, so one role builder there rebuilds
-the disc as a single solid for CAD from the same tags. The mechanism in full, including
-how to write these for your own composite, is in
-[Write NeXus translators](custom-nexus-registry.md#many-instances-one-nexus-group).
+the McStas file literally describes. Grouping is an enrichment there, and unnecessary
+when the disc is read from the tree.
 
 ### Writing your own
 
 The shape to copy is `niess/components/chopper.py::DiscChopper.to_mccode`: it calls
 `assembler.component(...)` once per instance and tags each one.
+
+### A composite that needs something around its contents
+
+A composite often needs more than components: a coordinate frame to hang them from, a
+user variable they share, an `%include` to put them in. Those go in `__mccode_enter__`,
+which runs before the composite's children are emitted, and `__mccode_exit__`, which
+runs after and closes whatever was opened.
+
+```python
+class Cassette(Base):
+    detectors: tuple[He3Tube, ...]
+
+    def __mccode_enter__(self, visit):
+        assembler = visit.context.assembler
+        frame = assembler.component(f'{visit.name}_arm', 'Arm',
+                                    at=((0, 0, 0), visit.frame),
+                                    rotate=((0, self.angle.value, 0), visit.frame))
+        add_niess_metadata(frame, self, source_name=f'{visit.name}_arm',
+                           role='reference-frame')
+        for child in visit.children():          # put the contents in that frame
+            visit.context.frames[child.id] = frame
+        return frame
+```
+
+`visit` is the composite's place in the instrument: `visit.name` is what it is called,
+`visit.frame` what it hangs from, `visit.index` its position among its siblings, and
+`visit.ancestor(SomeClass)` the enclosing thing of a given kind. Returning
+`niess.walk.SKIP` from `__mccode_enter__` means the composite emits its own children
+itself, which is what `Arm` does — its two frames interleave with its two components,
+so they cannot be walked in order.
+
+Nothing has to be registered anywhere. Everything a class contributes to a McStas
+instrument is written on the class:
+
+| on the class | for |
+| --- | --- |
+| `__mccode__` | what the thing *is*: one `COMPONENT` line and its parameters |
+| `to_mccode` | contributing to the instrument around it — see [above](#contributing-to-the-instrument-around-it) |
+| `__mccode_enter__` | what a composite needs around its contents |
+| `__mccode_exit__` | closing whatever that opened |
+
+A translator can also be *registered* against a class, which then wins over the class's
+own hooks. That is for the cases a method cannot serve: extending a class you do not
+own, or scoping a conversion so that importing a module does not change some other
+instrument's output — the same reason `niess.nexus` keeps BIFROST's translators off the
+shared registry.
 
 !!! danger "Tag every instance you build by hand"
 

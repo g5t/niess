@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import msgspec
-from networkx import DiGraph
 from msgspec.structs import fields
 from functools import lru_cache
 from mccode_antlr.assembler import Assembler
@@ -20,8 +19,33 @@ class Section(msgspec.Struct, tag=True):
         they are deliberately invisible to every introspection method here. Filtering
         in one place keeps the name, type and item views consistent with each other
         however many there are, and wherever they are declared.
+
+        The same rule applies to a Base, so it lives in :mod:`niess.tree` and this
+        defers to it -- Section is not a Base, and the two would otherwise drift.
         """
-        return [fi for fi in fields(cls) if not fi.name.startswith('_')]
+        from ..tree import component_fields
+        return component_fields(cls)
+
+    def __niess_children__(self):
+        """This section's components, in declaration order -- which is beam order."""
+        from ..tree import default_children
+        return default_children(self)
+
+    def __repr__(self) -> str:
+        """What this is and what it contains. See :mod:`niess.display`.
+
+        Spelled out here rather than inherited: a Section is not a Base, and a user
+        holding a `Primary` should not get a different answer from one holding a `Tank`
+        because of which root it happens to descend from.
+        """
+        from ..display import node_header, text_tree
+        return text_tree(self, header=node_header(self))
+
+    def _repr_html_(self) -> str:
+        """The same tree in a notebook, collapsed, one `<details>` per node."""
+        from html import escape
+        from ..display import html_tree, node_header
+        return html_tree(self, header=f'<b>{escape(node_header(self))}</b>')
 
     @classmethod
     @lru_cache(maxsize=None)
@@ -97,16 +121,30 @@ class Section(msgspec.Struct, tag=True):
         #      scipp.Variable and mccode_antlr.? are converted
         return cls.from_calibration(d)
 
-    def to_graph(self):
-        from networkx import DiGraph
-        graph = DiGraph()
-        self.add_to_graph(None, '', graph)
-        return graph
+    def __mccode_enter__(self, visit):
+        """A section is a scope, not a component.
 
-    def add_to_graph(self, upstream: str | None, unused_section_name: str, graph: DiGraph):
-        last = upstream
-        for name in self.__struct_fields__:
-            names = getattr(self, name).add_to_graph(last, name, graph)
-            if isinstance(names, list) and len(names) == 1:
-                last = names[0]
-        return [last]
+        Without ``_flat`` it becomes an ``%include``d sub-instrument, so the emitted
+        McStas mirrors how the beamline is thought about rather than being one flat
+        list. ``Guides`` inside ``teaching`` becomes ``teaching_guides``.
+        """
+        import re
+        if getattr(self, '_flat', False):
+            return None
+        spaced = re.sub('([A-Z]+)', r'_\1', type(self).__name__).lower()
+        assembler = visit.context.assembler
+        return visit.context.push(assembler.included(f'{assembler.name}{spaced}'))
+
+    def __mccode_exit__(self, visit, entered):
+        if entered is not None:
+            visit.context.pop()
+
+    def __niess_flow__(self, graph, path):
+        """Children in declaration order, which for a section is beam order."""
+        from ..tree import chain_flow
+        return chain_flow(self, graph, path)
+
+    def to_graph(self):
+        """The particle flow through this section, as a networkx DiGraph."""
+        from ..tree import flow_graph
+        return flow_graph(self)

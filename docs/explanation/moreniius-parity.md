@@ -1,8 +1,25 @@
 # moreniius parity
 
-`niess.nexus` replaces [`moreniius`](https://github.com/g5t/moreniius), which converted
-McCode instruments to ESS NeXus Structure JSON through a `nexusformat` object model.
-This page records what happened to every part of it, so nothing was lost silently.
+!!! warning "Historical"
+
+    The code this page audits has since been **removed**. niess converted McCode
+    instruments to NeXus by reading the emitted instrument back; it converts niess
+    instruments by reading the object tree, and once every target did that, the
+    instrument-reading route was two thousand lines of reconstructing what the tree
+    states. It went with the McStas demotion.
+
+    This page is kept as the record of the port, because the port is why the NeXus
+    output looks the way it does, and because the classification of differences below
+    is still the argument for each of them. **The module paths named here no longer
+    exist.** Nothing in niess reads a `.instr` to convert it — `niess.io.mccode.load_instr`
+    still parses one so its placements can be inspected, which is a different thing.
+
+niess replaced [`moreniius`](https://github.com/g5t/moreniius), which converted McCode
+instruments to ESS NeXus Structure JSON through a `nexusformat` object model. This page
+records what happened to every part of it, so nothing was lost silently.
+
+The module paths below were relative to `niess/nexus/via_instr/`, the subpackage that
+held the instrument-reading route.
 
 The regression baseline that pins the two against each other, and the classification of
 every remaining difference, is documented in
@@ -19,7 +36,7 @@ separate, human step.
 
 ## Ported
 
-| moreniius | niess.nexus | Notes |
+| moreniius | where it went (since removed) | Notes |
 | --- | --- | --- |
 | `mccode/orientation.py` — `NXPart`, `NXParts`, `NXOrient` | `orientation.py` | Same algebra, emitting transformation dicts instead of `NXfield`s |
 | `mccode/instr.py` — `make_transformations`, `resolve_target`, `build_graph`, `inputs`/`outputs`, `guess_origin`, `to_nx` | `instrument.py::NexusContext` | `guess_origin` → `_find_origin`; `to_nx` → the `mcstas` dataset |
@@ -34,7 +51,7 @@ separate, human step.
 | `writer.py::convert_types` | `nodes.py::convert_type` | Minus the `NXattr`/`NXfield` branches |
 | `writer.py::_to_absolute` | `nodes.py::to_absolute` + `absolutize_depends_on` | The recursive rewrite is now its own pass rather than part of serialization |
 | `nxoff.py` — `NXoff.from_wedge`, `sphere`, `to_nexus` | `off.py` | |
-| `nexus_structure.py` — `load_instr`, `convert` (the `instr2ns` script) | `cli.py`, same `instr2ns` entry point | Gains `--origin`, `--nxlog-root`, `--absolute-depends-on`, `--indent`, `-o` |
+| `nexus_structure.py` — `load_instr` | `io/mccode.py` | Reading a file survives; see below for `convert`. It is not a NeXus concern, so it lives with the other McCode readers rather than under `nexus/` |
 | `MorEniius.from_mccode` / `to_nexus_structure` | `to_nexus_structure(instr, ...)` | One function; there was never a reason for the two-stage object |
 
 ## Subsumed — the need disappeared with `nexusformat`
@@ -60,7 +77,8 @@ separate, human step.
 | `utils.get_mcstasscript_component_eniius_data`, `decode_component_eniius_data`, `mccode_component_eniius_data` | The legacy `eniius_data` escape hatch: a JSON blob under METADATA name `eniius_data`/mimetype `json`, or scraped out of an EXTEND block with a regex. niess never used it (only a stale TODO in `components/monitors.py` mentioned it), and `nexus_structure_stream_data` supersedes it for the streaming case it was mostly used for. If a non-niess instrument ever needs arbitrary extra NeXus content per component, add it as a fourth tier in `streams.resolve_stream` rather than reviving the EXTEND-block regex. |
 | `nxoff.NXoff.from_nexus`, `get_guide_params`, `_get_width_height` | Read geometry *back* out of NeXus; no consumer in the conversion path. |
 | `path_navigator.NexusStructureNavigator` | A reader for navigating finished NeXus Structure JSON — a consumer-side convenience, not conversion. `nodes.find_child` / `nodes.get_attribute` cover what the tests need. Worth porting properly if users want it. |
-| `Writer.to_json` | Wrote the structure to a file. `cli.py -o` covers the CLI case; callers hold a plain dict and can `json.dump` it. |
+| `Writer.to_json` | Wrote the structure to a file. Callers hold a plain dict and can `json.dump` it. |
+| `nexus_structure.convert` — the `instr2ns` script | **Removed.** It translated an instrument niess did not build, which meant every target carried a second front-end forever. niess translates niess instruments; a `.instr` is not the source of truth in a niess world. `load_instr` survives for *reading* a file — see [Translate a McStas `.instr`](../how-to/translate-an-instr.md), which is the migration story this served. |
 
 ## Dependencies
 

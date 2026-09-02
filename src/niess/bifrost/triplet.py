@@ -42,6 +42,27 @@ class Triplet(Base):
 
     tubes: tuple[He3Tube, He3Tube, He3Tube]
     resistances: Variable
+    stream: dict | None = None
+    """How this triplet's data reaches NeXus -- ``{'module': 'ev44', 'topic': ...,
+    'source': ...}``.
+
+    Which topic a detector publishes on is a property of the facility's Kafka setup, not
+    of the tubes, so it belongs to whoever builds the instrument and is recorded here
+    rather than derived. Left unset, `niess.nexus.bifrost` streams ev44 on BIFROST's own
+    topic with an ``arc=..;triplet=..`` source, which is what these have always done.
+
+    Set from a calibration as ``'stream': {...}``. The same field is what the
+    emitted-instrument route reads, via the ``nexus_stream`` provenance entry
+    ``to_mccode`` writes when it is set -- see `FrameMonitor.stream`, which works the
+    same way.
+    """
+
+    def __niess_flow__(self, graph, path):
+        """One node. Three tubes, but they are one Detector_tubes component and one NXdetector. The
+        tubes stay walkable; flow does not run through them.
+        """
+        from ..tree import leaf_flow
+        return leaf_flow(self, graph, path)
 
     @classmethod
     def from_dict(cls, data):
@@ -104,7 +125,7 @@ class Triplet(Base):
             if name in params:
                 resistance['tube', idx] = params.get(name)
 
-        return Triplet(tuple(tubes), resistance)
+        return Triplet(tuple(tubes), resistance, stream=params.get('stream'))
 
     def triangulate(self, unit=None):
         from ..spatial import combine_triangulations
@@ -178,10 +199,36 @@ class Triplet(Base):
         )
         return params
 
+    def __mccode_enter__(self, visit):
+        """One Detector_tubes, however many tubes.
+
+        SKIP for the same reason an analyzer skips its blades: the tubes reach McStas as
+        declared arrays of resistances, not as three components.
+        """
+        from niess.walk import SKIP
+        from .arm import Arm
+
+        context = visit.context
+        arm = visit.ancestor(Arm)
+        name = arm.emit_name('triplet')
+        self.to_mccode(
+            context.assembler,
+            relative=context.reference(visit.frame),
+            distance=arm.obj.analyzer_detector_distance.value,
+            name=name,
+            when=context.whens.get(visit.id),
+            extend='flag = (SCATTERED) ? 1 : 0;',
+            insert_provenance_metadata=context.provenance,
+        )
+        context.emitted[visit.id] = name
+        return SKIP
+
     def to_mccode(self, assembler: Assembler, relative: str, distance: float, name: str,
                   when: str = None, extend: str = None, add_metadata: bool = False,
-                  component: str = None, parameters: dict = None):
-        from niess.mccode import add_niess_metadata, ensure_registry
+                  component: str = None, parameters: dict = None,
+            insert_provenance_metadata: bool = True):
+        from niess.assembler import ensure_registry
+        from niess.provenance import add_niess_metadata
         if component is None:
             component = 'Detector_tubes'
         if component in ('Detector_tubes', 'Detector_time_tubes'):
@@ -202,7 +249,13 @@ class Triplet(Base):
         tubes = assembler.component(name, component, at=((0, 0, distance), relative), parameters=base_parameters)
         tubes.WHEN(when)
         tubes.EXTEND(extend)
-        add_niess_metadata(tubes, self, source_name=name, role='physical-component')
+        # The other route reads the selection out of provenance, since all it has is
+        # the emitted component. Written only when there is one, so an instrument that
+        # takes the default emits exactly the text it did before.
+        extra = {} if self.stream is None else {'nexus_stream': self.stream}
+        if insert_provenance_metadata:
+            add_niess_metadata(tubes, self, source_name=name, role='physical-component',
+                           extra=extra)
 
     def efu_calibration(self, group: int = -1) -> EFUTripletConfig:
         # The charge division space is subdivided by the Event Formation Unit into

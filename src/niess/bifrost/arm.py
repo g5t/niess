@@ -3,7 +3,6 @@ from __future__ import annotations
 from niess.components.component import Base
 
 class Arm(Base):
-    from networkx import DiGraph
     from mccode_antlr.assembler import Assembler
     from mccode_antlr.instr import Instance
     from .analyzer import Analyzer
@@ -12,6 +11,72 @@ class Arm(Base):
 
     analyzer: Analyzer
     detector: Triplet
+
+    # -- geometry -------------------------------------------------------------
+    # These describe where the analyzer and detector are relative to the sample. They
+    # were computed inside to_mccode, which meant only the McStas conversion could see
+    # them; they are properties of the arm, so they live on the arm.
+    #
+    # Note the sample is at the origin here. Arm.mcstas_parameters and
+    # Arm.rtp_parameters take an explicit `sample` and subtract it, and they derive the
+    # scattering angle a different way (acos of a dot product, unsigned, in radians).
+    # Deliberately not unified: these are the quantities the emitted instrument is built
+    # from, and this is a move, not a rewrite.
+
+    def __niess_label__(self, label: str) -> str:
+        """An arm contributes only its number, so an analyzer inside channel 3's first arm
+        is ``channel_3_1``-prefixed.
+        """
+        from ..tree import label_index
+        index = label_index(label)
+        if index is None:
+            raise ValueError(
+                f'a Arm is identified by its position; got the label {label!r}'
+            )
+        return str(index + 1)
+
+    @property
+    def sample_analyzer_vector(self) -> Variable:
+        """Sample to the centre of the analyzer."""
+        return self.analyzer.central_blade.position
+
+    @property
+    def analyzer_detector_vector(self) -> Variable:
+        """Analyzer centre to the middle of the central detector tube."""
+        centre = (self.detector.tubes[1].at + self.detector.tubes[1].to) / 2
+        return centre - self.sample_analyzer_vector
+
+    @property
+    def sample_analyzer_distance(self) -> Variable:
+        from scipp import dot, sqrt
+        vec = self.sample_analyzer_vector
+        return sqrt(dot(vec, vec)).to(unit='m')
+
+    @property
+    def analyzer_detector_distance(self) -> Variable:
+        from scipp import dot, sqrt
+        vec = self.analyzer_detector_vector
+        return sqrt(dot(vec, vec)).to(unit='m')
+
+    @property
+    def scattering_angle(self) -> Variable:
+        """The total scattering angle, signed, in the arm's vertical plane.
+
+        Measured from the incoming direction to the analyzer-detector direction, so it
+        carries the sign that says which way the arm bends -- unlike the unsigned
+        ``acos`` form in ``mcstas_parameters``.
+        """
+        from scipp import atan2, dot, vector
+        sa_vec = self.sample_analyzer_vector
+        ad_vec = self.analyzer_detector_vector
+        x = dot(ad_vec, sa_vec / self.sample_analyzer_distance)
+        y = dot(ad_vec, vector([0, 0, 1]))
+        return atan2(y=y, x=x).to(unit='degree')
+
+    @property
+    def analyzer_theta(self) -> Variable:
+        """Half the scattering angle: how far the analyzer is turned to reflect."""
+        return self.scattering_angle / 2
 
     @classmethod
     def from_dict(cls, data):
@@ -117,24 +182,61 @@ class Arm(Base):
             print(f'Detector under-illuminated: the detector width {det_hor} should be less than the analyzer width {ana_hor}')
         return det_hor, ana_ver
 
+    def __niess_children__(self):
+        """Two frames and the two things measured from them.
+
+        The second frame is measured from the analyzer rather than from the arm, which
+        is why it is declared after it: a detector sits at twice the Bragg angle, and
+        the analyzer is what defines that angle.
+        """
+        from ..components.frame import Frame
+        from scipp import scalar, vector
+        point = Frame(
+            name='analyzer_point',
+            position=vector([0., 0., 1.]) * self.sample_analyzer_distance,
+            # a quarter turn about the beam: McStas' monochromator scatters in its own
+            # horizontal plane and BIFROST's analyzers scatter vertically
+            rotation=vector([0., 0., 1.]) * scalar(90.0, unit='degree'),
+            extra={'frame': 'analyzer-point'}, owner_key='arm')
+        turned = Frame(name='detector_angle', relative_to='analyzer',
+                       rotation=vector([0., 1., 0.]) * self.analyzer_theta,
+                       extra={'frame': 'detector-angle'}, owner_key='arm')
+        return (('analyzer_point', point), ('analyzer', self.analyzer),
+                ('detector_angle', turned), ('detector', self.detector))
+
+    def __niess_child_frame__(self, visit, label, default):
+        if label == 'analyzer':
+            return f'{visit.id}/analyzer_point'
+        if label == 'detector':
+            return f'{visit.id}/detector_angle'
+        return default
+
+    def __mccode_enter__(self, visit):
+        """The per-particle state this arm's analyzer and detector are gated on."""
+        from .channel import Channel
+        context = visit.context
+        channel = visit.ancestor(Channel)
+        when = f'{1 + channel.index} == secondary_cassette'
+        analyzer_when = f'0 == secondary_scattered && {when}'
+        detector_when = f'{when} && {1 + visit.index}==analyzer'
+        context.whens[f'{visit.id}/analyzer_point'] = analyzer_when
+        context.whens[f'{visit.id}/analyzer'] = analyzer_when
+        context.whens[f'{visit.id}/detector_angle'] = detector_when
+        context.whens[f'{visit.id}/detector'] = detector_when
+        return None
+
     def to_mccode(self, assembler: Assembler, ref: Instance, name: str,
                   analyzer_when: str = None, analyzer_extend: str = None,
-                  detector_when: str = None, detector_extend: str = None, **kwargs):
-        from scipp import concat, all, isclose, vector, dot, sqrt, atan2
-        from niess.mccode import add_niess_metadata
+                  detector_when: str = None, detector_extend: str = None,
+                  insert_provenance_metadata: bool = True, **kwargs):
+        from scipp import vector
+        from niess.provenance import add_niess_metadata
         # For each channel we need to define the local coordinate system, relative to the provided sample
         origin = vector([0, 0, 0], unit='m')
 
-        sa_vec = self.analyzer.central_blade.position
-        ad_vec = (self.detector.tubes[1].at + self.detector.tubes[1].to) / 2 - sa_vec
-
-        sample_analyzer_d = sqrt(dot(sa_vec, sa_vec)).to(unit='m')
-        analyzer_detector_distance = sqrt(dot(ad_vec, ad_vec)).to(unit='m')
-
-        x = dot(ad_vec, sa_vec / sample_analyzer_d)
-        y = dot(ad_vec, vector([0, 0, 1]))
-        two_theta = atan2(y=y, x=x).to(unit='degree').value
-        theta = two_theta / 2
+        sample_analyzer_d = self.sample_analyzer_distance
+        analyzer_detector_distance = self.analyzer_detector_distance
+        theta = self.analyzer_theta.value
 
         point = f'{name}_analyzer_point'    # component name of the location of the analyzer
         mono = f'{name}_monochromator'      # component name of the analyzer itself
@@ -143,8 +245,9 @@ class Arm(Base):
 
         # Move to the center of the analyzer & reorient for monochromator scattering in vertical plane
         arm = assembler.component(point, "Arm", at=((0, 0, sample_analyzer_d.value), ref), rotate=((0, 0, 90), ref))
-        add_niess_metadata(arm, self, source_name=point, role='reference-frame',
-                           extra={'frame': 'analyzer-point', 'arm': name})
+        if insert_provenance_metadata:
+            add_niess_metadata(arm, self, source_name=point, role='reference-frame',
+                               extra={'frame': 'analyzer-point', 'arm': name})
         if analyzer_when is not None:
             arm.WHEN(analyzer_when)
         # Insert the analyzer rotated by theta (origin is used for calculating coverage angles)
@@ -152,8 +255,10 @@ class Arm(Base):
                                 when=analyzer_when, extend=analyzer_extend, origin=origin)
         # Change the coordinate system by theta -- total scattering angle is then 2theta
         det_angle = assembler.component(orient, "Arm", at=((0, 0, 0), mono), rotate=((0, theta, 0), mono))
-        add_niess_metadata(det_angle, self, source_name=orient, role='reference-frame',
-                           extra={'frame': 'detector-angle', 'arm': name})
+        if insert_provenance_metadata:
+            add_niess_metadata(det_angle, self, source_name=orient,
+                               role='reference-frame',
+                               extra={'frame': 'detector-angle', 'arm': name})
         det_angle.WHEN(detector_when)
         # Insert the detector distance along that arm
         self.detector.to_mccode(assembler, relative=orient, distance=analyzer_detector_distance.value, name=triplet,
@@ -161,21 +266,6 @@ class Arm(Base):
                                 component=kwargs.get('detector_component', None),
                                 parameters=kwargs.get('detector_parameters', None))
 
-    def add_to_graph(self, upstream: str | None, name: str, graph: DiGraph):
-        point = f'{name}_analyzer_point'  # component name of the location of the analyzer
-        mono = f'{name}_monochromator'  # component name of the analyzer itself
-        orient = f'{name}_detector_angle'  # component name of the oriented arm pointing at the detector
-        triplet = f'{name}_triplet'  # component name of the detector itself
-
-        graph.add_node(point)
-        if upstream is not None:
-            graph.add_edge(upstream, point)
-        self.analyzer.add_to_graph(point, mono, graph)
-        graph.add_node(orient)
-        graph.add_edge(mono, orient)
-        self.detector.add_to_graph(orient, triplet, graph)
-
-        return [triplet]
 
     def efu_calibration(self, group: int = -1):
         return self.detector.efu_calibration(group=group)
